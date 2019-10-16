@@ -1,5 +1,7 @@
-/* This program is the move() part of tiny_mc and small_mc
-   It simulates the size of the step a photon takes between a single interaction.
+/* This program is for section 5.2.1 of Jacques' 2011 book chapter, page 113.
+   https://omlc.org/software/mc/Jacques2011_MonteCarlo_Welch&VanGemert.pdf   
+
+  It simulates the size of the step a photon takes between a single interaction.
 
    Dayle Kotturi 					October 16, 2019
  */ 
@@ -7,7 +9,7 @@
 #include <stdlib.h>
 #include <math.h>
 #define N_PHOTONS (1000) /* the more the better. MC works best with 100K events */
-#define N_BINS  (22)      /* number of bins * bin width = range of x axis */
+#define N_BINS  (50)      /* number of bins * bin width = range of x axis */
 #define BIN_WIDTH (0.275) /* this is "ds" in cm. reduce this for better resolution */
 
 int i;
