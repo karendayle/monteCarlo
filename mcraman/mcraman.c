@@ -136,12 +136,17 @@ int main(int argc, const char * argv[]) {
 	float 	muav[Ntiss];            // muav[0:Ntiss-1], absorption coefficient of ith tissue type
 	float 	musv[Ntiss];            // scattering coeff. 
 	float 	gv[Ntiss];              // anisotropy of scattering
+
+	/* Raman parameters */
+	int n_inelastic;
     
 	/* Input/Output */
-	char   	myname[STRLEN];		// Holds the user's choice of myname, used in input and output files. 
-	char	filename[STRLEN];     // temporary filename for writing output.
-	FILE*	fid=NULL;               // file ID pointer 
-	char    buf[32];                // buffer for reading header.dat
+	char   	myname[STRLEN];	    // Holds the user's choice of myname, used in input and output files. 
+	char	filename[STRLEN];   // filename where tissue parameters are
+	FILE*	fid=NULL;           // file ID pointer 
+	char	filename2[STRLEN];  // filename for writing debug output, incl #steps taken by each photon.
+	FILE*	fid2=NULL;          // file ID pointer 
+	char    buf[32];            // buffer for reading header.dat
 	
 	strcpy(myname, argv[1]);    // acquire name from argument of function call by user.
 	printf("name = %s\n",myname);
@@ -152,6 +157,10 @@ int main(int argc, const char * argv[]) {
 	strcat(filename, "_H.mci");
 	fid = fopen(filename,"r");
 	fgets(buf, 32, fid);
+	strcat(filename2, "_DBG.txt");
+	fid2 = fopen(filename2,"w");
+	fprintf(fid2, "photon#, steps\n");
+	
 	// run parameters
 	sscanf(buf, "%f", &time_min); // desired time duration of run [min]
 	fgets(buf, 32, fid);
@@ -173,8 +182,8 @@ int main(int argc, const char * argv[]) {
 	sscanf(buf, "%d", &mcflag);  // mcflag, 0 = uniform, 1 = Gaussian, 2 = iso-pt
 	fgets(buf, 32,fid);
 	sscanf(buf, "%d", &launchflag);  // launchflag, 0 = ignore, 1 = manually set
-        fgets(buf, 32,fid);
-        sscanf(buf, "%d", &boundaryflag);  // 0 = no boundaries, 1 = escape at all boundaries, 2 = escape at surface only
+	fgets(buf, 32,fid);
+	sscanf(buf, "%d", &boundaryflag);  // 0 = no boundaries, 1 = escape at all boundaries, 2 = escape at surface only
 	
 	fgets(buf, 32,fid);
 	sscanf(buf, "%f", &xs);  // initial launch point
@@ -215,6 +224,7 @@ int main(int argc, const char * argv[]) {
 		sscanf(buf, "%f", &gv[i]);		// anisotropy of scatter [dimensionless]
 	}    
 	fclose(fid);
+	fclose(fid2);
     
 	printf("time_min = %0.2f min\n",time_min);
 	printf("Nx = %d, dx = %0.4f [cm]\n",Nx,dx);
@@ -282,21 +292,21 @@ int main(int argc, const char * argv[]) {
 	// NOT READY: R  = (float *)malloc(NN*sizeof(float));	/* escaping flux [W/cm^2/W.delivered] */
     
 	// read binary file
-    strcpy(filename,myname);
-    strcat(filename, "_T.bin");
-    fid = fopen(filename, "rb");
-    fread(v, sizeof(char), NN, fid);
-    fclose(fid);
+	strcpy(filename,myname);
+	strcat(filename, "_T.bin");
+	fid = fopen(filename, "rb");
+	fread(v, sizeof(char), NN, fid);
+	fclose(fid);
     
-    // Show tissue on screen, along central z-axis, by listing tissue type #'s.
-    iy = Ny/2;
-    ix = Nx/2;
-    printf("central axial profile of tissue types:\n");
-    for (iz=0; iz<Nz; iz++) {
-        i = (long)(iz*Ny*Nx + ix*Ny + iy);
-        printf("%d",v[i]);
-    }
-    printf("\n\n");
+	// Show tissue on screen, along central z-axis, by listing tissue type #'s.
+	iy = Ny/2;
+	ix = Nx/2;
+	printf("central axial profile of tissue types:\n");
+	for (iz=0; iz<Nz; iz++) {
+		i = (long)(iz*Ny*Nx + ix*Ny + iy);
+		printf("%d",v[i]);
+	}
+	printf("\n\n");
     
 	/**************************
 	 * ============================ MAJOR CYCLE ========================
@@ -314,8 +324,8 @@ int main(int argc, const char * argv[]) {
 	 Launch N photons, initializing each one before progation.
 	 *****/
 	printf("------------- Begin Monte Carlo -------------\n");
-    printf("%s\n",myname);
-    printf("requesting %0.1f min\n",time_min);
+	printf("%s\n",myname);
+	printf("requesting %0.1f min\n",time_min);
 	Nphotons = 1000; // will be updated to achieve desired run time, time_min.
 	i_photon = 0;
 	CNT = 0;
@@ -323,11 +333,11 @@ int main(int argc, const char * argv[]) {
 		/**** LAUNCH 
 		 Initialize photon position and trajectory.
 		 *****/
-		//if (fmod(i_photon,10)==0) printf("photon %ld took %d steps\n",i_photon,CNT);
+		if (fmod(i_photon,10)==0) fprintf(fid2, "%ld t%d\n",i_photon,CNT);
 
-		i_photon += 1;				/* increment photon count */
-		W = 1.0;                    /* set photon weight to one */
-		photon_status = ALIVE;      /* Launch an ALIVE photon */
+		i_photon += 1;			/* increment photon count */
+		W = 1.0;			/* set photon weight to one */
+		photon_status = ALIVE;		/* Launch an ALIVE photon */
 		CNT = 0;
 		
 		// Print out message about progress.
