@@ -57,7 +57,7 @@
 /* If 1+cos(theta) <= ONE_MINUS_COSZERO, fabs(PI-theta) <= 1e-6 rad. */
 /* Raman parameters */
 #define P_RAMAN		(0.01)
-#define N_TARGETS (1)
+#define N_TARGETS (5)
 #define TARGET (0)
 
 /* DECLARE FUNCTIONS */
@@ -142,14 +142,21 @@ int main(int argc, const char * argv[]) {
 	float 	gv[Ntiss];              // anisotropy of scattering
 
 	/* Raman parameters */
-	int	n_targets = 0;
+	int	n_targets[N_TARGETS] = {0, 0, 0, 0, 0};
 	int	n_inelastic = 0;
 	int	max_steps = 0;
 	int	this_photon_was_raman_scattered = 0;
-	/*float	target_max_values[N_TARGETS] = {3/14, 5/15, 1/14, 1/28, 9/28};*/
-	float	target_max_values[N_TARGETS] = {0.25};
-	/*int	targets[N_TARGETS] = {0, 0, 0, 0, 0};*/
-	int	targets[N_TARGETS] = {0};
+	float target_max_values[N_TARGETS] = {0.036, 0.071, 0.214, 0.321, 0.357}; /* in increasing order */
+	/* Map
+		1702				1/28 = 0.036
+		1430				1/14 = 0.071
+	    1082				3/14 = 0.214
+		other				9/28 = 0.321
+		1584				5/14 = 0.357
+	 */						
+	/*float	target_max_values[N_TARGETS] = {0.25};*/
+	int	targets[N_TARGETS] = {0, 0, 0, 0, 0};
+	/*int	targets[N_TARGETS] = {0};*/
     
 	/* Input/Output */
 	char   	myname[STRLEN];	    // Holds the user's choice of myname, used in input and output files. 
@@ -616,24 +623,22 @@ int main(int argc, const char * argv[]) {
 						}
 
 						rnd = RandomNum;
-						//printf("%f ", rnd);
-						for (i=0; i<N_TARGETS; i++) {
-							if (rnd < target_max_values[i]) 
-								targets[i] = 1;
+						int found = 0;
+						i = 0;
+						while (!found && i < N_TARGETS) {
+							if (rnd < target_max_values[i]) {
+								printf("%f matches %d\n", rnd, i);
+								n_targets[i] = n_targets[i] + 1;
+								found = 1;
+							}
+							i++;
 						}
 						/* Here's the thing: if I want to propagate all 4 targets in a single run, I need 
 						   to keep track of WHICH target this photon matches. If I just model it 4 times,
 						   once per target, I don't have to care, because ONLY the target wavelength will go
 						   forward from here.
-
 						   So for now, let's just pick one target and keep going with the stepping.
 					 	*/
-
-						/* Does the new wavelength match the target we want? */
-						if (targets[TARGET] == 1) {
-							//printf("match\n");
-							n_targets++;	
-						}
 					}
 				}
 
@@ -735,7 +740,8 @@ int main(int argc, const char * argv[]) {
 //printf("%s is done.\n",myname);
 	
 	printf("There were %d inelastic scattering events\n", n_inelastic);
-	printf("There were %d new wavelengths that matched target\n", n_targets);
+	printf("The new wavelengths matched the array of targets %d %d %d %d %d\n", 
+	    n_targets[0], n_targets[1], n_targets[2], n_targets[3], n_targets[4]);
 	printf("The max number of steps taken by a photon was %d\n", max_steps);
 	printf("------------------------------------------------------\n");
 	now = time(NULL);
