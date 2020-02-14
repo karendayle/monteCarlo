@@ -57,7 +57,7 @@
 /* If 1+cos(theta) <= ONE_MINUS_COSZERO, fabs(PI-theta) <= 1e-6 rad. */
 /* Raman parameters */
 #define P_RAMAN		(0.01)
-#define N_TARGETS (5)
+#define N_TARGETS (1)
 #define TARGET (0)
 
 /* DECLARE FUNCTIONS */
@@ -146,8 +146,10 @@ int main(int argc, const char * argv[]) {
 	int	n_inelastic = 0;
 	int	max_steps = 0;
 	int	this_photon_was_raman_scattered = 0;
-	float	target_max_values[N_TARGETS] = {3/14, 5/15, 1/14, 1/28, 9/28};
-	int	targets[N_TARGETS] = {0, 0, 0, 0, 0};;
+	/*float	target_max_values[N_TARGETS] = {3/14, 5/15, 1/14, 1/28, 9/28};*/
+	float	target_max_values[N_TARGETS] = {0.25};
+	/*int	targets[N_TARGETS] = {0, 0, 0, 0, 0};*/
+	int	targets[N_TARGETS] = {0};
     
 	/* Input/Output */
 	char   	myname[STRLEN];	    // Holds the user's choice of myname, used in input and output files. 
@@ -595,25 +597,26 @@ int main(int argc, const char * argv[]) {
 					if (rnd < P_RAMAN) {
 						n_inelastic++;
 						this_photon_was_raman_scattered = 1;
-						/* Based on the area under the curve of the spectrum, determine the new
-						   wavelength. There are a set bins mapping the probability of a target
-						   wavelength to the area under the curve at, near this target over the 
-						   area under the entire spectrum.
-						   Roughly, for 4,MBA, if the total area under the curve is 14, then the
-						   probabilities tare:
-						   Wavelength (cm^-1)	P
+						/* 	Based on the area under the curve of the spectrum, determine the new
+							wavelength. There are a set bins mapping the probability of a target
+							wavelength to the area under the curve at, near this target over the 
+							area under the entire spectrum.
+							Roughly, for 4,MBA, if the total area under the curve is 14, then the
+							probabilities tare:
+							Wavelength (cm^-1)	P
 						==============================
-					   	1082			3/14 
-					   	1584			5/14
-					   	1430			1/14
-					   	1702			1/28
-					   	other		9/28
+							1082				3/14 = 0.214
+							1584				5/14 = 0.357
+							1430				1/14 = 0.071
+							1702				1/28 = 0.036
+							other				9/28 = 0.321
 					 	*/
 						for (i=0; i<N_TARGETS; i++) {
 							targets[i] = 0; // reset
 						}
 
 						rnd = RandomNum;
+						//printf("%f ", rnd);
 						for (i=0; i<N_TARGETS; i++) {
 							if (rnd < target_max_values[i]) 
 								targets[i] = 1;
@@ -628,6 +631,7 @@ int main(int argc, const char * argv[]) {
 
 						/* Does the new wavelength match the target we want? */
 						if (targets[TARGET] == 1) {
+							//printf("match\n");
 							n_targets++;	
 						}
 					}
