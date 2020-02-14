@@ -30,7 +30,7 @@
  *  Reorganized by Steve. May 8, 2012:
  *      Reads input files, outputs binary files.
  *  updated: 1 June, 2017 slj
- *  adapted from mcxyz.c: 17 October, 2019 dayle
+ *  adapted for Raman from mcxyz.c: 17 October, 2019 dayle
  **********/
 
 #include <math.h>
@@ -146,17 +146,9 @@ int main(int argc, const char * argv[]) {
 	int	n_inelastic = 0;
 	int	max_steps = 0;
 	int	this_photon_was_raman_scattered = 0;
-	float target_max_values[N_TARGETS] = {0.036, 0.071, 0.214, 0.321, 0.357}; /* in increasing order */
-	/* Map
-		1702				1/28 = 0.036
-		1430				1/14 = 0.071
-	    1082				3/14 = 0.214
-		other				9/28 = 0.321
-		1584				5/14 = 0.357
-	 */						
-	/*float	target_max_values[N_TARGETS] = {0.25};*/
+	float target_bin_values[N_TARGETS] = {0.214, 0.285, 0.642, 0.678, 1.0}; //explained @line ~606			
 	int	targets[N_TARGETS] = {0, 0, 0, 0, 0};
-	/*int	targets[N_TARGETS] = {0};*/
+	int n_dblScatteringCandidates = 0;
     
 	/* Input/Output */
 	char   	myname[STRLEN];	    // Holds the user's choice of myname, used in input and output files. 
@@ -594,10 +586,10 @@ int main(int argc, const char * argv[]) {
 
 				 ****/
 				if (this_photon_was_raman_scattered) {
-					/* assumption: two Raman events for a single photon are not allowed, so skip this part
-					   if a photon has already been inelastically scattered.
+					/* Assumption: >1 Raman event for a single photon is not allowed, 
+					   so skip this part if a photon has already been inelastically scattered.
 					 */
-					//fprintf(fid2, "only one Raman event allowed per photon\n");
+					n_dblScatteringCandidates++;
 				}
 				else {
 					rnd = RandomNum;
@@ -610,13 +602,13 @@ int main(int argc, const char * argv[]) {
 							area under the entire spectrum.
 							Roughly, for 4,MBA, if the total area under the curve is 14, then the
 							probabilities tare:
-							Wavelength (cm^-1)	P
-						==============================
-							1082				3/14 = 0.214
-							1584				5/14 = 0.357
-							1430				1/14 = 0.071
-							1702				1/28 = 0.036
-							other				9/28 = 0.321
+							Wavenumber (cm^-1)	P(wavenumber)    Bin boundaries
+						==========================================================
+							1082				3/14 = 0.214     0.000-0.214
+							1430				1/14 = 0.071     0.214-0.285
+							1584				5/14 = 0.357     0.285-0.642
+							1702				1/28 = 0.036     0.642-0.678 
+							other				9/28 = 0.321     0.678-1.000
 					 	*/
 						for (i=0; i<N_TARGETS; i++) {
 							targets[i] = 0; // reset
@@ -626,8 +618,8 @@ int main(int argc, const char * argv[]) {
 						int found = 0;
 						i = 0;
 						while (!found && i < N_TARGETS) {
-							if (rnd < target_max_values[i]) {
-								printf("%f matches %d\n", rnd, i);
+							if (rnd < target_bin_values[i]) {
+								//printf("%f matches %d\n", rnd, i);
 								n_targets[i] = n_targets[i] + 1;
 								found = 1;
 							}
@@ -743,6 +735,8 @@ int main(int argc, const char * argv[]) {
 	printf("The new wavelengths matched the array of targets %d %d %d %d %d\n", 
 	    n_targets[0], n_targets[1], n_targets[2], n_targets[3], n_targets[4]);
 	printf("The max number of steps taken by a photon was %d\n", max_steps);
+	printf("While only one Raman event was ALLOWED per photon. %d photons met crit for 2 inelastic events\n", 
+	    n_dblScatteringCandidates);
 	printf("------------------------------------------------------\n");
 	now = time(NULL);
 	printf("%s\n", ctime(&now));
