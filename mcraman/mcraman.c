@@ -149,6 +149,7 @@ int main(int argc, const char * argv[]) {
 	float target_bin_values[N_TARGETS] = {0.214, 0.285, 0.642, 0.678, 1.0}; //explained @line ~606			
 	int	targets[N_TARGETS] = {0, 0, 0, 0, 0};
 	int n_dblScatteringCandidates = 0;
+	int color; // keeps track of wavelength of photon. initially it's -1, then 0-4 if inelastically scattered
     
 	/* Input/Output */
 	char   	myname[STRLEN];	    // Holds the user's choice of myname, used in input and output files. 
@@ -157,6 +158,8 @@ int main(int argc, const char * argv[]) {
 	char	filename2[STRLEN];  // filename for writing debug output, incl #steps taken by each photon.
 	FILE*	fid2=NULL;          // file ID pointer 
 	char    buf[32];            // buffer for reading header.dat
+	char	filename3[STRLEN];  // filename for writing final position of each photon.
+	FILE*	fid3=NULL;          // file ID pointer
 	
 	strcpy(myname, argv[1]);    // acquire name from argument of function call by user.
 	printf("name = %s\n",myname);
@@ -168,9 +171,18 @@ int main(int argc, const char * argv[]) {
 	fid = fopen(filename,"r");
 	fgets(buf, 32, fid);
 	strcpy(filename2,myname);
+	
+	/**** OUTPUT FILES *****/
+	// debug output
 	strcat(filename2, "_DBG.txt");
 	fid2 = fopen(filename2,"w");
 	fprintf(fid2, "photon#, steps\n");
+	
+	// position data
+    strcpy(filename3,myname);
+	strcat(filename3, "_XYZ.txt");
+	fid3 = fopen(filename3,"w");
+	//fprintf(fid3, "Final x y z of each photon\n");
 	
 	// run parameters
 	sscanf(buf, "%f", &time_min); // desired time duration of run [min]
@@ -348,6 +360,7 @@ int main(int argc, const char * argv[]) {
 		W = 1.0;			/* set photon weight to one */
 		photon_status = ALIVE;		/* Launch an ALIVE photon */
 		CNT = 0;
+		color = -1; 	    /* indicates original wavelength to begin */
 		
 		// Print out message about progress.
 		if ((i_photon>1000) & (fmod(i_photon, (int)(Nphotons/100))  == 0)) {
@@ -622,6 +635,7 @@ int main(int argc, const char * argv[]) {
 								//printf("%f matches %d\n", rnd, i);
 								n_targets[i] = n_targets[i] + 1;
 								found = 1;
+								color = i;
 							}
 							i++;
 						}
@@ -692,6 +706,8 @@ int main(int argc, const char * argv[]) {
 			/* if ALIVE, continue propagating */
 			/* If photon DEAD, record the number of steps it took and then launch new photon. */	
 			fprintf(fid2, "%ld \t%d\n",i_photon,CNT);
+			
+			fprintf(fid3, "%f %f %f %d\n",x,y,z,color);
 			if (CNT > max_steps) max_steps = CNT;
         
 	} while (i_photon < Nphotons);  /* end RUN */
@@ -742,6 +758,7 @@ int main(int argc, const char * argv[]) {
 	printf("%s\n", ctime(&now));
     
 	fclose(fid2);
+	fclose(fid3);
     
 	free(v);
  	free(F);

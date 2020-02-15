@@ -37,7 +37,7 @@ myname = 'skinvessel'; nm = 532;
 disp(sprintf('------ mcxyz %s -------',myname))
 
 % Load header file
-filename = sprintf('%s_H.mci',myname);
+filename = sprintf('../mcraman/%s_H.mci',myname);
 disp(['loading ' filename])
 fid = fopen(filename, 'r');
 A = fscanf(fid,'%f',[1 Inf])';
@@ -79,7 +79,7 @@ end
 reportHmci(myname)
 
 %% Load Fluence rate F(y,x,z) 
-filename = sprintf('%s_F.bin',myname);
+filename = sprintf('../mcraman/%s_F.bin',myname);
 disp(['loading ' filename])
 tic
     fid = fopen(filename, 'rb');
@@ -90,7 +90,7 @@ F = reshape(Data,Ny,Nx,Nz); % F(y,x,z)
 
 %%
 % Load tissue structure in voxels, T(y,x,z) 
-filename = sprintf('%s_T.bin',myname);
+filename = sprintf('../mcraman/%s_T.bin',myname);
 disp(['loading ' filename])
 tic
     fid = fopen(filename, 'rb');

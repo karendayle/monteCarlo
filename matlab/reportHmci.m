@@ -4,7 +4,7 @@ function reportHmci(myname)
 %   Updated Feb 8, 2017. slj, adding boundaryflag B(10) (see s(10).s)
 
 home
-fid = fopen(sprintf('%s_H.mci',myname),'r');
+fid = fopen(sprintf('../mcraman/%s_H.mci',myname),'r');
 B = fscanf(fid,'%f');
 fclose(fid);
 
