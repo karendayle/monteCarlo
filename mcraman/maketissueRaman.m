@@ -216,7 +216,7 @@ set(gca,'fontsize',sz)
 xlabel('x [cm]')
 ylabel('z [cm]')
 colorbar
-cmap = makecmap(Nt);
+cmap = makecmapRaman(Nt);
 colormap(cmap)
 set(colorbar,'fontsize',1)
 % label colorbar
