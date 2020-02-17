@@ -37,9 +37,9 @@ home
 SAVEON      = 1;        % 1 = save myname_T.bin, myname_H.mci 
                         % 0 = don't save. Just check the program.
 
-myname      = 'skin1';% name for files: myname_T.bin, myname_H.mci  kdk
-time_min    = 10;      	% time duration of the simulation [min] <----- run time ----- kdk
-nm          = 785;   	% desired wavelength of simulation kdk 
+myname      = 'skinvessel';% name for files: myname_T.bin, myname_H.mci  
+time_min    = 10;      	% time duration of the simulation [min] <----- run time -----
+nm          = 532;   	% desired wavelength of simulation
 Nbins       = 200;    	% # of bins in each dimension of cube 
 binsize     = 0.0005; 	% size of each bin, eg. [cm] or [mm]
 
