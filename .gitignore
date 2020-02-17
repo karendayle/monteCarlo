@@ -1,0 +1,15 @@
+
+matlab/skinvessel_T.bin
+*.bin
+*.mci
+*.asv
+*.txt
+*.jpg
+*.txt
+mcraman/skinvessel_props.m
+mcraman/skin1_props.m
+*.mat
+*.txt
+*.exe
+*.txt
+mcraman/skinvessel_XYZ.txt

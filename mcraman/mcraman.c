@@ -31,7 +31,7 @@
  *      Reads input files, outputs binary files.
  *  updated: 1 June, 2017 slj
  *  adapted for Raman from mcxyz.c: 17 October, 2019 dayle
- **********/
+ *********************************************/
 
 #include <math.h>
 #include <stdio.h>
@@ -58,7 +58,6 @@
 /* Raman parameters */
 #define P_RAMAN		(0.01)
 #define N_TARGETS (5)
-#define TARGET (0)
 
 /* DECLARE FUNCTIONS */
 double RandomGen(char Type, long Seed, long *Status);  
@@ -149,8 +148,9 @@ int main(int argc, const char * argv[]) {
 	float target_bin_values[N_TARGETS] = {0.214, 0.285, 0.642, 0.678, 1.0}; //explained @line ~606			
 	int	targets[N_TARGETS] = {0, 0, 0, 0, 0};
 	int n_dblScatteringCandidates = 0;
-	int color; // keeps track of wavelength of photon. initially it's -1, then 0-4 if inelastically scattered
-    
+	int color; // keeps track of wavelength of photon. initially it's 0, then 1-5 if inelastically scattered
+    long n_scattering_events = 0;
+	
 	/* Input/Output */
 	char   	myname[STRLEN];	    // Holds the user's choice of myname, used in input and output files. 
 	char	filename[STRLEN];   // filename where tissue parameters are
@@ -170,17 +170,17 @@ int main(int argc, const char * argv[]) {
 	strcat(filename, "_H.mci");
 	fid = fopen(filename,"r");
 	fgets(buf, 32, fid);
-	strcpy(filename2,myname);
 	
 	/**** OUTPUT FILES *****/
-	// debug output
-	strcat(filename2, "_DBG.txt");
+	// number of steps by photon
+	strcpy(filename2,myname);
+	strcat(filename2, "_STEPS.txt");
 	fid2 = fopen(filename2,"w");
-	fprintf(fid2, "photon#, steps\n");
+	//fprintf(fid2, "photon#, steps\n");
 	
 	// position data
     strcpy(filename3,myname);
-	strcat(filename3, "_XYZ.txt");
+	strcat(filename3, "_ENDPOS.txt");
 	fid3 = fopen(filename3,"w");
 	//fprintf(fid3, "Final x y z of each photon\n");
 	
@@ -282,7 +282,7 @@ int main(int argc, const char * argv[]) {
 	else if (boundaryflag==2)
 		printf("boundaryflag = 2, so escape at surface only.\n");    
 	else{
-		printf("improper boundaryflag. quit.\n");
+		printf("improper boundaryflag (%d). quit.\n", boundaryflag);
 		return 0;
 	}
 	printf("# of tissues available, Nt = %d\n",Nt);
@@ -360,7 +360,7 @@ int main(int argc, const char * argv[]) {
 		W = 1.0;			/* set photon weight to one */
 		photon_status = ALIVE;		/* Launch an ALIVE photon */
 		CNT = 0;
-		color = -1; 	    /* indicates original wavelength to begin */
+		color = 0; 	    /* indicates original wavelength to begin */
 		
 		// Print out message about progress.
 		if ((i_photon>1000) & (fmod(i_photon, (int)(Nphotons/100))  == 0)) {
@@ -486,6 +486,7 @@ int main(int argc, const char * argv[]) {
 				while ((rnd = RandomNum) <= 0.0);   /* yields 0 < rnd <= 1 */
 				sleft	= -log(rnd);				/* dimensionless step */
 				CNT += 1;
+				n_scattering_events++;
 				
 				do{  // while sleft>0   
 					s     = sleft/mus;				/* Step size [cm].*/
@@ -635,7 +636,7 @@ int main(int argc, const char * argv[]) {
 								//printf("%f matches %d\n", rnd, i);
 								n_targets[i] = n_targets[i] + 1;
 								found = 1;
-								color = i;
+								color = i+1;
 							}
 							i++;
 						}
@@ -706,7 +707,6 @@ int main(int argc, const char * argv[]) {
 			/* if ALIVE, continue propagating */
 			/* If photon DEAD, record the number of steps it took and then launch new photon. */	
 			fprintf(fid2, "%ld \t%d\n",i_photon,CNT);
-			
 			fprintf(fid3, "%f %f %f %d\n",x,y,z,color);
 			if (CNT > max_steps) max_steps = CNT;
         
@@ -753,6 +753,7 @@ int main(int argc, const char * argv[]) {
 	printf("The max number of steps taken by a photon was %d\n", max_steps);
 	printf("While only one Raman event was ALLOWED per photon. %d photons met crit for 2 inelastic events\n", 
 	    n_dblScatteringCandidates);
+	printf("The total number of scattering events: %ld\n", n_scattering_events);
 	printf("------------------------------------------------------\n");
 	now = time(NULL);
 	printf("%s\n", ctime(&now));
