@@ -37,11 +37,11 @@ home
 SAVEON      = 1;        % 1 = save myname_T.bin, myname_H.mci 
                         % 0 = don't save. Just check the program.
 
-myname      = 'skin2min';% name for files: myname_T.bin, myname_H.mci  
+myname      = 'skin3min';% name for files: myname_T.bin, myname_H.mci  
 time_min    = 2;      	% time duration of the simulation [min] <----- run time -----
 nm          = 785;   	% desired wavelength of simulation
 Nbins       = 200;    	% # of bins in each dimension of cube 
-binsize     = 0.0005; 	% size of each bin, eg. [cm] or [mm]
+binsize     = 0.005; 	% size of each bin in [cm]. Increased by 10x for SERS-sensor scale
 
 % Set Monte Carlo launch flags
 mcflag      = 0;     	% launch: 0 = uniform beam, 1 = Gaussian, 2 = isotropic pt. 
@@ -113,6 +113,7 @@ if isinf(zfocus), zfocus = 1e12; end
 
 T = double(zeros(Ny,Nx,Nz)); 
 
+% 1. Start with making everything skin and then adjust where 
 T = T + 4;      % fill background with skin (dermis)
 
 zsurf = 0.0100;  % position of air/skin surface
@@ -128,21 +129,25 @@ for iz=1:Nz % for every depth z(iz)
     if iz>round(zsurf/dz) & iz<=round((zsurf+0.0060)/dz)
         T(:,:,iz) = 5; 
     end
-
-    % blood vessel @ xc, zc, radius, oriented along y axis
-    xc      = 0;            % [cm], center of blood vessel
-    zc      = Nz/2*dz;     	% [cm], center of blood vessel
-    vesselradius  = 0.0100;      	% blood vessel radius [cm]
-    for ix=1:Nx
-            xd = x(ix) - xc;	% vessel, x distance from vessel center
-            zd = z(iz) - zc;   	% vessel, z distance from vessel center                
-            r  = sqrt(xd^2 + zd^2);	% r from vessel center
-            if (r<=vesselradius)     	% if r is within vessel
-                T(:,ix,iz) = 3; % blood
-            end
-
-    end %ix
     
+    % Cylindrical SERS-active hydrogel @ xc, zc (2mm) , radius, oriented along y axis
+    xc      = 0;            % [cm], center of cylindrical sensor
+    zc      = 0.2;      	% [cm], center of cylindrical sensor 
+    sensorradius  = 0.0500; % [cm], cylindrical sensor radius
+    for ix=1:Nx
+            xd = x(ix) - xc;	% x distance from sensor center
+            zd = z(iz) - zc;   	% vessel, z distance from sensor center                
+            r  = sqrt(xd^2 + zd^2);	% r from vessel center
+            if r<=sensorradius     	% if r is within vessel
+                for iy=1:Ny
+                    if iy > Ny/4 & iy < 3*Ny/4 % sensor is centered and
+                        % spans half the structure
+                        T(iy,ix,iz) = 10; % SERS-active hydrogel tissue type
+                        %fprintf('sensor at %d,%d,%d\n', ix,iy,iz);
+                    end 
+                end %iy
+            end
+    end %ix 
 end % iz
 
 
@@ -204,8 +209,14 @@ end % SAVEON
 
 
 %% Look at structure of Tzx at iy=Ny/2
+%% This shows cross-sectional view of cylindrical SERS sensor
 Txzy = shiftdim(T,1);   % Tyxz --> Txzy
 Tzx  = Txzy(:,:,Ny/2)'; % Tzx
+
+%% Look at structure of Tzy at ix=Nx/2
+%% This shows side view of cylindrical SERS sensor
+Tzyx = shiftdim(T,2); %Tyxz --> Tzyx
+Tzy = Tzyx(:,:,Nx/2); % Tzy
 
 %%
 figure(1); clf
@@ -215,51 +226,64 @@ hold on
 set(gca,'fontsize',sz)
 xlabel('x [cm]')
 ylabel('z [cm]')
-colorbar
-cmap = makecmapRaman(Nt);
-colormap(cmap)
-set(colorbar,'fontsize',1)
-% label colorbar
-zdiff = zmax-zmin;
-%%%
+c = addLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue, mcflag, radius, zs, z);
+%%
+figure(2); clf
+sz = 12;  
+imagesc(y,z,Tzy,[1 Nt])
+hold on
+set(gca,'fontsize',sz)
+xlabel('y [cm]')
+ylabel('z [cm]')
+c = addLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue, mcflag, radius, zs, z);
 
-for i=1:Nt
-    yy = (Nt-i)/(Nt-1)*Nz*dz;
-    text(max(x)*1.2,yy, tissue(i).name,'fontsize',fz)
+function c = addLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue, mcflag, radius, zs, z)   
+    fz = 10; 
+    colorbar
+    cmap = makecmapRaman(Nt);
+    colormap(cmap)
+    set(colorbar,'fontsize',1)
+    % label colorbar
+    zdiff = zmax-zmin;
+    %%%
+    for i=1:Nt
+        yy = (Nt-i)/(Nt-1)*Nz*dz;
+        text(max(x)*1.2,yy, tissue(i).name,'fontsize',fz)
+    end
+    
+    text(xmax,zmin - zdiff*0.06, 'Tissue types','fontsize',fz)
+    axis equal image
+    axis([xmin xmax zmin zmax])
+
+    %%% draw launch
+    N = 20; % # of beam rays drawn
+    switch mcflag
+        case 0 % uniform
+            for i=0:N
+                plot((-radius + 2*radius*i/N)*[1 1],[zs max(z)],'r-')
+            end
+
+        case 1 % Gaussian
+            for i=0:N
+                plot([(-radius + 2*radius*i/N) xfocus],[zs zfocus],'r-')
+            end
+
+        case 2 % iso-point
+            for i=1:N
+                th = (i-1)/19*2*pi;
+                xx = Nx/2*cos(th) + xs;
+                zz = Nx/2*sin(th) + zs;
+                plot([xs xx],[zs zz],'r-')
+            end
+
+        case 3 % rectangle
+            zz = max(z);
+            for i=1:N
+                xx = -radius + 2*radius*i/20;
+                plot([xx xx],[zs zz],'r-')
+            end
+    end
+    c = 1;
 end
 
-text(xmax,zmin - zdiff*0.06, 'Tissue types','fontsize',fz)
-axis equal image
-axis([xmin xmax zmin zmax])
-
-%%% draw launch
-N = 20; % # of beam rays drawn
-switch mcflag
-    case 0 % uniform
-        for i=0:N
-            plot((-radius + 2*radius*i/N)*[1 1],[zs max(z)],'r-')
-        end
-
-    case 1 % Gaussian
-        for i=0:N
-            plot([(-radius + 2*radius*i/N) xfocus],[zs zfocus],'r-')
-        end
-
-    case 2 % iso-point
-        for i=1:N
-            th = (i-1)/19*2*pi;
-            xx = Nx/2*cos(th) + xs;
-            zz = Nx/2*sin(th) + zs;
-            plot([xs xx],[zs zz],'r-')
-        end
-        
-    case 3 % rectangle
-        zz = max(z);
-        for i=1:N
-            xx = -radius + 2*radius*i/20;
-            plot([xx xx],[zs zz],'r-')
-        end
-end
-
-disp('done')
 
