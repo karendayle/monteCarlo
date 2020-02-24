@@ -56,8 +56,9 @@
 #define ONE_MINUS_COSZERO 1.0E-12   /* If 1-cos(theta) <= ONE_MINUS_COSZERO, fabs(theta) <= 1e-6 rad. */
 /* If 1+cos(theta) <= ONE_MINUS_COSZERO, fabs(PI-theta) <= 1e-6 rad. */
 /* Raman parameters */
-#define P_RAMAN		(0.01)
+#define P_RAMAN		(0.01) // kdk artificially high, but necessary to make model work. Normalize later.
 #define N_TARGETS (5)
+#define SERS (10)
 
 /* DECLARE FUNCTIONS */
 double RandomGen(char Type, long Seed, long *Status);  
@@ -76,7 +77,7 @@ int main(int argc, const char * argv[]) {
     
     if (argc==0) {
         printf("assuming you've compiled mcxyz.c as gomcxyz ...\n");
-		printf("USAGE: gomcxyz name\n");
+		printf("USAGE: gomcxyz name\n"); // haha argv[0] doesn't work under windows
 		printf("which will load the files name_H.mci and name_T.bin\n");
 		printf("and run the Monte Carlo program.\n");
 		printf("Yields  name_F.bin, which holds the fluence rate distribution.\n");
@@ -141,14 +142,18 @@ int main(int argc, const char * argv[]) {
 	float 	gv[Ntiss];              // anisotropy of scattering
 
 	/* Raman parameters */
-	int	n_targets[N_TARGETS] = {0, 0, 0, 0, 0};
+	int	n_targetsPH4[N_TARGETS] = {0, 0, 0, 0, 0};
+	int	n_targetsPH7[N_TARGETS] = {0, 0, 0, 0, 0};
+	int	n_targetsPH10[N_TARGETS] = {0, 0, 0, 0, 0};
 	int	n_inelastic = 0;
 	int	max_steps = 0;
 	int	this_photon_was_raman_scattered = 0;
-	float target_bin_values[N_TARGETS] = {0.214, 0.285, 0.642, 0.678, 1.0}; //explained @line ~606			
+	float target_bin_pH4_values[N_TARGETS] = {0.357, 0.392, 0.821, 0.892, 1.0}; //explained @line ~532
+	float target_bin_pH7_values[N_TARGETS] = {0.357, 0.428, 0.857, 0.892, 1.0}; 	
+	float target_bin_pH10_values[N_TARGETS] = {0.357, 0.464, 0.892, 0.911, 1.0};	
 	int	targets[N_TARGETS] = {0, 0, 0, 0, 0};
 	int n_dblScatteringCandidates = 0;
-	int color; // keeps track of wavelength of photon. initially it's 0, then 1-5 if inelastically scattered
+	int colorPH4, colorPH7, colorPH10; // keeps track of wavelength of photon. initially it's 0, then 1-5 if inelastically scattered
     long n_scattering_events = 0;
 	
 	/* Input/Output */
@@ -160,6 +165,10 @@ int main(int argc, const char * argv[]) {
 	char    buf[32];            // buffer for reading header.dat
 	char	filename3[STRLEN];  // filename for writing final position of each photon.
 	FILE*	fid3=NULL;          // file ID pointer
+	char	filename4[STRLEN];  // filename for writing final position of each photon.
+	FILE*	fid4=NULL;          // file ID pointer
+	char	filename5[STRLEN];  // filename for writing final position of each photon.
+	FILE*	fid5=NULL;          // file ID pointer
 	
 	strcpy(myname, argv[1]);    // acquire name from argument of function call by user.
 	printf("name = %s\n",myname);
@@ -178,10 +187,22 @@ int main(int argc, const char * argv[]) {
 	fid2 = fopen(filename2,"w");
 	//fprintf(fid2, "photon#, steps\n");
 	
-	// position data
+	// final position data for pH4
     strcpy(filename3,myname);
-	strcat(filename3, "_ENDPOS.txt");
+	strcat(filename3, "_ENDPOS_PH4.txt");
 	fid3 = fopen(filename3,"w");
+	//fprintf(fid3, "Final x y z of each photon\n");
+	
+	// final position data for pH7
+    strcpy(filename4,myname);
+	strcat(filename4, "_ENDPOS_PH7.txt");
+	fid4 = fopen(filename4,"w");
+	//fprintf(fid3, "Final x y z of each photon\n");
+	
+	// final position data for pH10
+    strcpy(filename5,myname);
+	strcat(filename5, "_ENDPOS_PH10.txt");
+	fid5 = fopen(filename5,"w");
 	//fprintf(fid3, "Final x y z of each photon\n");
 	
 	// run parameters
@@ -258,7 +279,7 @@ int main(int argc, const char * argv[]) {
 	printf("zs = %0.4f [cm]\n",zs);
 	printf("mcflag = %d\n",mcflag);
 	if (mcflag==0) printf("launching uniform flat-field beam\n");
-	if (mcflag==1) printf("launching Gaissian beam\n");
+	if (mcflag==1) printf("launching Gaussian beam\n");
 	if (mcflag==2) printf("launching isotropic point source\n");
 	if (mcflag==3) printf("launching square source\n");
 	printf("xfocus = %0.4f [cm]\n",xfocus);
@@ -357,10 +378,10 @@ int main(int argc, const char * argv[]) {
 		 *****/
 
 		i_photon += 1;			/* increment photon count */
-		W = 1.0;			/* set photon weight to one */
-		photon_status = ALIVE;		/* Launch an ALIVE photon */
+		W = 1.0;			    /* set photon weight to one */
+		photon_status = ALIVE;  /* Launch an ALIVE photon */
 		CNT = 0;
-		color = 0; 	    /* indicates original wavelength to begin */
+		colorPH4 = 0; colorPH7 = 0; colorPH10 = 0; 	  /* kdk indicates original wavelength to begin */
 		
 		// Print out message about progress.
 		if ((i_photon>1000) & (fmod(i_photon, (int)(Nphotons/100))  == 0)) {
@@ -373,7 +394,7 @@ int main(int argc, const char * argv[]) {
 				printf("%0.0f%% done\n", i_photon/Nphotons*100);
 		}
         
-		// At 1000th photon, update Nphotons to achieve desired runtime (time_min) //DK weird indent here. comment also belongs lower
+		// At 1000th photon, update Nphotons to achieve desired runtime (time_min) //kdk weird indent here. comment also belongs lower
 		if (i_photon==1)
 			temp_time = clock();
 			if (i_photon==1000) {    
@@ -415,6 +436,7 @@ int main(int argc, const char * argv[]) {
 					phi		= rnd*2.0*PI;
 					xfocus	= r*cos(phi);
 					yfocus	= r*sin(phi);
+					// kdk how/shy does this work when zfocus is inf for collimated beam? 
 					temp	= sqrt((x - xfocus)*(x - xfocus) + (y - yfocus)*(y - yfocus) + zfocus*zfocus);
 					ux		= -(x - xfocus)/temp;
 					uy		= -(y - yfocus)/temp;
@@ -465,7 +487,7 @@ int main(int argc, const char * argv[]) {
 			if (iz<0)   iz=0;		
 			/* Get the tissue type of located voxel */
 			i	= (long)(iz*Ny*Nx + ix*Ny + iy);
-			type	= v[i];
+			type	= v[i];  // kdk there will be a new type, which is the SERS-active hydrogel
 			mua 	= muav[type];
 			mus 	= musv[type];
 			g 	= gv[type];
@@ -493,6 +515,94 @@ int main(int argc, const char * argv[]) {
 					tempx = x + s*ux;				/* Update positions. [cm] */
 					tempy = y + s*uy;	
 					tempz = z + s*uz;
+					
+					if (type == SERS) {
+						/**** RAMAN by dayle October 2019
+						 First check this photon to see that it hasn't already been Ramaned. Use a flag for this
+						 that gets reset each time.
+						 Get a random number between 0 and 1 for the Raman scattering event.
+						 Compare this number against the Probability of a Raman event (0.01 from the lit).
+						 If number <= Praman, then it's Raman. 1) Record the photon number (cuz it's so rare 
+						 that we are saying it can't happen again to this same photon). Actually this is not needed.
+						 We stay with a photon until it's gone, so we can just have a local flag and reset it each
+						 photon.  
+						 2) Go get a random wavelength for this photon. Let's say only stokes and map the number as ...
+						 wait, isn't this the part where I use area under the curve for the probability 
+						 of the new wavelength? 
+						 Now for the last part, handle the target part. This sim must be done once per target
+						 (there are 4). Depending which target it is, there will be a diff area under curve 
+						 to set the probability. I.e. it's more likely to get a value for the reference peak
+						 than it is to get one of the tiny peaks. 
+
+						Feb 2020
+						This whole section needs to move into the preceding "do...while" AND be only executed 
+						when type = SERS-active hydrogel
+						 ****/
+						if (this_photon_was_raman_scattered) {
+							/* Assumption: >1 Raman event for a single photon is not allowed, 
+							   so skip this part if a photon has already been inelastically scattered.
+							 */
+							n_dblScatteringCandidates++;
+						}
+						else {
+							rnd = RandomNum;
+							if (rnd < P_RAMAN) {
+								n_inelastic++;
+								this_photon_was_raman_scattered = 1;
+								/* 	Based on the area under the curve of the spectrum, determine the new
+									wavelength. There are a set bins mapping the probability of a target
+									wavelength to the area under the curve at, near this target over the 
+									area under the entire spectrum.
+									Roughly, for 4,MBA, if the total area under the curve is 14, then the
+									probabilities tare:
+									Wavenumber pH4      Bin         pH7      Bin         pH10      Bin
+									(cm^-1)    Prob'ty  range       Prob'ty  range       Prob'ty   range
+									==========================================================================
+									1082	   5/14     0.000-0.357 5/14     0.000-0.357 5/14      0.000-0.357
+									1430	   1/28     0.357-0.392 1/14     0.357-0.428 3/28      0.357-0.464
+									1584	   6/14     0.392-0.821 6/14     0.428-0.857 6/14      0.464-0.892
+									1702	   1/28     0.821-0.892 1/28     0.857-0.892 1/56      0.892-0.911
+									other	   3/28     0.892-1.000 3/28     0.892-1.000 5/56      0.911-1.000
+								*/
+
+								rnd = RandomNum;
+								int foundPH4 = 0;  
+								i = 0;
+								while (!foundPH4 && i < N_TARGETS) {
+									if (rnd < target_bin_pH4_values[i]) { 
+										//printf("%f matches %d\n", rnd, i);
+										n_targetsPH4[i] = n_targetsPH4[i] + 1; // keep track of matches to all 5 targets
+										foundPH4 = 1;
+										colorPH4 = i+1;
+									}
+									i++;
+								}
+								int foundPH7 = 0;
+								i = 0;
+								while (!foundPH7 && i < N_TARGETS) {
+									if (rnd < target_bin_pH7_values[i]) { 
+										//printf("%f matches %d\n", rnd, i);
+										n_targetsPH7[i] = n_targetsPH7[i] + 1; // keep track of matches to all 5 targets
+										foundPH7 = 1;
+										colorPH7 = i+1;
+									}
+									i++;
+								}
+								int foundPH10 = 0;
+								i = 0;
+								while (!foundPH10 && i < N_TARGETS) {
+									if (rnd < target_bin_pH10_values[i]) { 
+										//printf("%f matches %d\n", rnd, i);
+										n_targetsPH10[i] = n_targetsPH10[i] + 1; // keep track of matches to all 5 targets
+										foundPH10 = 1;
+										colorPH10 = i+1;
+									}
+									i++;
+								}
+
+							} // Random number indicates that Raman event has occurred
+						} // Handle possibility of inelastic scattering  
+					} // Handle SERS-active hydrogel
 					
 					sv = SameVoxel(x,y,z, tempx, tempy, tempz, dx,dy,dz);
 					if (sv) /* photon in same voxel */
@@ -570,7 +680,7 @@ int main(int argc, const char * argv[]) {
 							if (iy<0)   {iy=0;    bflag = 0;}
 						}
 						
-						// update pointer to tissue type
+						// update tissue type now for next time, now that we have left the voxel
 						i    = (long)(iz*Ny*Nx + ix*Ny + iy);
 						type = v[i];
 						mua  = muav[type];
@@ -580,75 +690,6 @@ int main(int argc, const char * argv[]) {
 					} //(sv) /* same voxel */
 			
 				} while(sleft>0); //do...while
-
-				/**** RAMAN
-				 First check this photon to see that it hasn't already been Ramaned. Use a flag for this
-				 that gets reset each time.
-				 Get a random number between 0 and 1 for the Raman scattering event.
-				 Compare this number against the Probability of a Raman event (0.01 from the lit).
-				 If number <= Praman, then it's Raman. 1) Record the photon number (cuz it's so rare 
-				 that we are saying it can't happen again to this same photon). Actually this is not needed.
-				 We stay with a photon until it's gone, so we can just have a local flag and reset it each
-				 photon.  
-				 2) Go get a random wavelength for this photon. Let's say only stokes and map the number as ...
-				 wait, isn't this the part where I use area under the curve for the probability 
-				 of the new wavelength? 
-				 Now for the last part, handle the target part. This sim must be done once per target
-				 (there are 4). Depending which target it is, there will be a diff area under curve 
-				 to set the probability. I.e. it's more likely to get a value for the reference peak
-				 than it is to get one of the tiny peaks. 
-
-				 ****/
-				if (this_photon_was_raman_scattered) {
-					/* Assumption: >1 Raman event for a single photon is not allowed, 
-					   so skip this part if a photon has already been inelastically scattered.
-					 */
-					n_dblScatteringCandidates++;
-				}
-				else {
-					rnd = RandomNum;
-					if (rnd < P_RAMAN) {
-						n_inelastic++;
-						this_photon_was_raman_scattered = 1;
-						/* 	Based on the area under the curve of the spectrum, determine the new
-							wavelength. There are a set bins mapping the probability of a target
-							wavelength to the area under the curve at, near this target over the 
-							area under the entire spectrum.
-							Roughly, for 4,MBA, if the total area under the curve is 14, then the
-							probabilities tare:
-							Wavenumber (cm^-1)	P(wavenumber)    Bin boundaries
-						==========================================================
-							1082				3/14 = 0.214     0.000-0.214
-							1430				1/14 = 0.071     0.214-0.285
-							1584				5/14 = 0.357     0.285-0.642
-							1702				1/28 = 0.036     0.642-0.678 
-							other				9/28 = 0.321     0.678-1.000
-					 	*/
-						for (i=0; i<N_TARGETS; i++) {
-							targets[i] = 0; // reset
-						}
-
-						rnd = RandomNum;
-						int found = 0;
-						i = 0;
-						while (!found && i < N_TARGETS) {
-							if (rnd < target_bin_values[i]) {
-								//printf("%f matches %d\n", rnd, i);
-								n_targets[i] = n_targets[i] + 1;
-								found = 1;
-								color = i+1;
-							}
-							i++;
-						}
-						/* Here's the thing: if I want to propagate all 4 targets in a single run, I need 
-						   to keep track of WHICH target this photon matches. If I just model it 4 times,
-						   once per target, I don't have to care, because ONLY the target wavelength will go
-						   forward from here.
-						   So for now, let's just pick one target and keep going with the stepping.
-					 	*/
-					}
-				}
-
 				
 				/**** SPIN 
 				 Scatter photon into new trajectory defined by theta and psi.
@@ -707,7 +748,9 @@ int main(int argc, const char * argv[]) {
 			/* if ALIVE, continue propagating */
 			/* If photon DEAD, record the number of steps it took and then launch new photon. */	
 			fprintf(fid2, "%ld \t%d\n",i_photon,CNT);
-			fprintf(fid3, "%f %f %f %d\n",x,y,z,color);
+			fprintf(fid3, "%f %f %f %d\n",x,y,z,colorPH4);
+			fprintf(fid4, "%f %f %f %d\n",x,y,z,colorPH7);
+			fprintf(fid5, "%f %f %f %d\n",x,y,z,colorPH10);
 			if (CNT > max_steps) max_steps = CNT;
         
 	} while (i_photon < Nphotons);  /* end RUN */
@@ -748,8 +791,12 @@ int main(int argc, const char * argv[]) {
 //printf("%s is done.\n",myname);
 	
 	printf("There were %d inelastic scattering events\n", n_inelastic);
-	printf("The new wavelengths matched the array of targets %d %d %d %d %d\n", 
-	    n_targets[0], n_targets[1], n_targets[2], n_targets[3], n_targets[4]);
+	printf("The new wavelengths matched the array of pH4 targets %d %d %d %d %d\n", 
+	    n_targetsPH4[0], n_targetsPH4[1], n_targetsPH4[2], n_targetsPH4[3], n_targetsPH4[4]);
+	printf("The new wavelengths matched the array of pH7 targets %d %d %d %d %d\n", 
+	    n_targetsPH7[0], n_targetsPH7[1], n_targetsPH7[2], n_targetsPH7[3], n_targetsPH7[4]);
+	printf("The new wavelengths matched the array of pH10 targets %d %d %d %d %d\n", 
+	    n_targetsPH7[0], n_targetsPH10[1], n_targetsPH10[2], n_targetsPH10[3], n_targetsPH10[4]);
 	printf("The max number of steps taken by a photon was %d\n", max_steps);
 	printf("While only one Raman event was ALLOWED per photon. %d photons met crit for 2 inelastic events\n", 
 	    n_dblScatteringCandidates);
@@ -760,7 +807,9 @@ int main(int argc, const char * argv[]) {
     
 	fclose(fid2);
 	fclose(fid3);
-    
+    fclose(fid4);
+	fclose(fid5);
+	
 	free(v);
  	free(F);
 	free(R);
