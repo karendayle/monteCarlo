@@ -20,9 +20,9 @@ capColor = [0., 0., 0.]; % black
 X = X + cnt(1); 
 Y = Y + cnt(2); 
 Z = Z * height; 
-h1 = surf(X,Y,Z,'facecolor',color,'LineStyle','none');
-h2 = fill3(X(1,:),Y(1,:),Z(1,:),capColor);
-h3 = fill3(X(2,:),Y(2,:),Z(2,:),capColor);
+h1 = surf(X,Z,Y,'facecolor',color,'LineStyle','none');
+h2 = fill3(X(1,:),Z(1,:),Y(1,:),capColor);
+h3 = fill3(X(2,:),Z(2,:),Y(2,:),capColor);
 xlabel('x [cm]');
 ylabel('y [cm]');
 zlabel('z [cm]');
