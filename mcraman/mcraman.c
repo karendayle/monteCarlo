@@ -147,10 +147,10 @@ int main(int argc, const char * argv[]) {
 	int	n_targetsPH10[N_TARGETS] = {0, 0, 0, 0, 0};
 	int	n_inelastic = 0;
 	int	max_steps = 0;
-	int	this_photon_was_raman_scattered = 0;
-	float target_bin_pH4_values[N_TARGETS] = {0.357, 0.392, 0.821, 0.892, 1.0}; //explained @line ~532
-	float target_bin_pH7_values[N_TARGETS] = {0.357, 0.428, 0.857, 0.892, 1.0}; 	
-	float target_bin_pH10_values[N_TARGETS] = {0.357, 0.464, 0.892, 0.911, 1.0};	
+	int	this_photon_was_raman_scattered = 0;	
+	float target_bin_pH4_values[N_TARGETS] = {0.357, 0.411, 0.839, 0.911, 1.0}; //explained @line ~532
+	float target_bin_pH7_values[N_TARGETS] = {0.357, 0.446, 0.875, 0.911, 1.0}; 	
+	float target_bin_pH10_values[N_TARGETS] = {0.357, 0.464, 0.893, 0.911, 1.0};
 	int	targets[N_TARGETS] = {0, 0, 0, 0, 0};
 	int n_dblScatteringCandidates = 0;
 	int colorPH4, colorPH7, colorPH10; // keeps track of wavelength of photon. initially it's 0, then 1-5 if inelastically scattered
@@ -398,9 +398,9 @@ int main(int argc, const char * argv[]) {
 			temp_time = clock();
 		
 		// At 1000th photon, update Nphotons to achieve desired runtime (time_min)
-		if (i_photon==1000) {    // kdk why wait until the 1000th photon to do this? 
-		                         // ans: b/c that's when you have an idea how long it 
-								 // takes to process 1000 photons
+		if (i_photon==1000) {    // kdk time how long it takes to process 1000 photons and then 
+								 // adjust the number of photons that will be processed based
+								 // on the desired run time
 			finish_time = clock();
 			Nphotons = (long)( time_min*60*999*CLOCKS_PER_SEC/(finish_time-temp_time) );
 			printf("Nphotons = %0.0f for simulation time = %0.2f min\n",Nphotons,time_min);
@@ -562,10 +562,10 @@ int main(int argc, const char * argv[]) {
 								(cm^-1)    Prob'ty  range       Prob'ty  range       Prob'ty   range
 								==========================================================================
 								1082	   5/14     0.000-0.357 5/14     0.000-0.357 5/14      0.000-0.357
-								1430	   1/28     0.357-0.392 1/14     0.357-0.428 3/28      0.357-0.464
-								1584	   6/14     0.392-0.821 6/14     0.428-0.857 6/14      0.464-0.892
-								1702	   1/28     0.821-0.892 1/28     0.857-0.892 1/56      0.892-0.911
-								other	   3/28     0.892-1.000 3/28     0.892-1.000 5/56      0.911-1.000
+								1430	   3/28     0.357-0.411 5/56     0.357-0.446 3/28      0.357-0.464
+								1584	   6/14     0.411-0.839 6/14     0.446-0.875 6/14      0.464-0.893
+								1702	   1/14     0.839-0.911 1/28     0.875-0.911 1/56      0.893-0.911
+								other	   5/56     0.911-1.000 5/56     0.911-1.000 5/56      0.911-1.000
 							*/
 
 							rnd = RandomNum;
