@@ -189,19 +189,19 @@ int main(int argc, const char * argv[]) {
 	
 	// final position data for pH4
     strcpy(filename3,myname);
-	strcat(filename3, "_ENDPOS_PH4.txt");
+	strcat(filename3, "-ENDPOS-PH4.txt");
 	fid3 = fopen(filename3,"w");
 	//fprintf(fid3, "Final x y z of each photon\n");
 	
 	// final position data for pH7
     strcpy(filename4,myname);
-	strcat(filename4, "_ENDPOS_PH7.txt");
+	strcat(filename4, "-ENDPOS-PH7.txt");
 	fid4 = fopen(filename4,"w");
 	//fprintf(fid3, "Final x y z of each photon\n");
 	
 	// final position data for pH10
     strcpy(filename5,myname);
-	strcat(filename5, "_ENDPOS_PH10.txt");
+	strcat(filename5, "-ENDPOS-PH10.txt");
 	fid5 = fopen(filename5,"w");
 	//fprintf(fid3, "Final x y z of each photon\n");
 	
