@@ -20,5 +20,6 @@ for i=1:64
     elseif  j<=7-dj, cmap(i,:) = [f2 f2 f2]; % gray matter
     elseif  j<=8-dj, cmap(i,:) = [0.5 1 1]; % white matter
     elseif  j<=9-dj, cmap(i,:) = [1 .5 .5]; % standard tissue
+    elseif  j<=10-dj,cmap(i,:) = [0.0000, 0.4470, 0.7410]; % SERS-active hydrogel
     end
 end
