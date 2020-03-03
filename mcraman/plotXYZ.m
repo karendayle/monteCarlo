@@ -61,7 +61,7 @@ for iLoop = 1:1 %length(infile)
     text(x, y, z, '1702 cm-1', 'Color', purple, 'FontSize', myTextFont);
     text(x, y, z, '_________', 'Color', purple, 'FontSize', myTextFont);
     y = y - deltaY;
-    text(x, y, z, 'other changes', 'Color', rust, 'FontSize', myTextFont);
+    text(x, y, z, 'other values', 'Color', rust, 'FontSize', myTextFont);
     text(x, y, z, '_____________', 'Color', rust, 'FontSize', myTextFont);
     y = y - deltaY;
 
@@ -81,13 +81,15 @@ function [h1, h2, h3] = plotCylinderWithCaps(r,cnt,height,nSides,color)
 capColor = [0., 0., 0.]; % black
 X = X + cnt(1); 
 Y = Y + cnt(2); 
-%Z = Z * height; 
-Z = Z* height-1*height/2; 
-h1 = surf(X,Z,Y,'facecolor',color,'LineStyle','none');
+Z = Z* height-1*height/2; % center at 0
+%h1 = surf(X,Z,Y,'facecolor',color,'LineStyle','none');
+h1 = mesh(X,Z,Y,'edgecolor', 'k');
+%h1 = surf(X,Z,Y,'LineStyle','none');
 h2 = fill3(X(1,:),Z(1,:),Y(1,:),capColor); % Note: z<->y are flipped to obtain desired orientation
 h3 = fill3(X(2,:),Z(2,:),Y(2,:),capColor); 
 xlabel('x [cm]');
 ylabel('y [cm]');
 zlabel('z [cm]');
+set(gca, 'ZDir','reverse')
 hold on;
 end  

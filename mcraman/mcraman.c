@@ -11,10 +11,10 @@
  *  USAGE   mcraman myname
  *              where myname is the user's choice. 
  *          The program reads two files prepared by user:
- *                  myname_H.mci    = header input file for mcxyz
+ *                  myname_H.mci    = header input file for mcraman
  *                  myname_T.bin    = tissue structure file
  *          The output will be written to 3 files:
- *                  myname_OP.m     = optical properties  (mua, mus, g for each tissue type)
+ *                  myname_props.m     = optical properties  (mua, mus, g for each tissue type)
  *                  myname_F.bin    = fluence rate output F[i] [W/cm^2 per W delivered]
  *
  *  The MATLAB program maketissue.m can create the two input files (myname_H.mci, myname_T.bin).

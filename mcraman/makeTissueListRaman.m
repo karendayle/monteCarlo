@@ -1,4 +1,4 @@
-function tissue = makeTissueList(nm)
+function tissue = makeTissueListRaman(nm)
 %function tissueProps = makeTissueListRaman(nm)
 %   Returns the tissue optical properties at the wavelength nm:
 %       tissueProps = [mua; mus; g]';
@@ -132,6 +132,12 @@ tissue(j).g   = gg;
 
 j=9;
 tissue(j).name  = 'standard tissue';
+tissue(j).mua   = 1;
+tissue(j).mus   = 100;
+tissue(j).g     = 0.90;
+
+j=10;
+tissue(j).name  = 'SERS-active hydrogel';
 tissue(j).mua   = 1;
 tissue(j).mus   = 100;
 tissue(j).g     = 0.90;
