@@ -148,9 +148,13 @@ int main(int argc, const char * argv[]) {
 	int	n_inelastic = 0;
 	int	max_steps = 0;
 	int	this_photon_was_raman_scattered = 0;	
-	float target_bin_pH4_values[N_TARGETS] = {0.357, 0.411, 0.839, 0.911, 1.0}; //explained @line ~532
-	float target_bin_pH7_values[N_TARGETS] = {0.357, 0.446, 0.875, 0.911, 1.0}; 	
-	float target_bin_pH10_values[N_TARGETS] = {0.357, 0.464, 0.893, 0.911, 1.0};
+	float target_bin_pH4_values[N_TARGETS] = {(20./56.), ((20.+3.)/56.), ((20.+3.+24.)/56.), ((20.+3.+24.+4.)/56.), 1.0}; //explained @line ~532
+	float target_bin_pH7_values[N_TARGETS] = {(20./56.), ((20.+5.)/56.), ((20.+5.+24.)/56.), ((20.+5.+24.+2.)/56.), 1.0}; 	
+	float target_bin_pH10_values[N_TARGETS] = {(20./56.), ((20.+6.)/56.), ((20.+6.+24.)/56.), ((20.+6.+24.+1.)/56.),1.0};
+	// These are the same, but seeing some round off errors so that # photons at ref peaks vary slightly across pH -- they shouldn't
+	//float target_bin_pH4_values[N_TARGETS] = {0.357, 0.411, 0.839, 0.911, 1.0}; //explained @line ~532
+	//float target_bin_pH7_values[N_TARGETS] = {0.357, 0.446, 0.875, 0.911, 1.0}; 	
+	//float target_bin_pH10_values[N_TARGETS] = {0.357, 0.464, 0.893, 0.911, 1.0};
 	int	targets[N_TARGETS] = {0, 0, 0, 0, 0};
 	int n_dblScatteringCandidates = 0;
 	int colorPH4, colorPH7, colorPH10; // keeps track of wavelength of photon. initially it's 0, then 1-5 if inelastically scattered
@@ -771,7 +775,7 @@ int main(int argc, const char * argv[]) {
 
 	// Normalize deposition (A) to yield fluence rate (F).
 	temp = dx*dy*dz*Nphotons;
-	for (i=0; i<NN;i++){
+	for (i=0; i<NN;i++){ // kdk what is NN? what is v[i]?
 		F[i] /= (temp*muav[v[i]]);
 	}
 	// Save the binary file
