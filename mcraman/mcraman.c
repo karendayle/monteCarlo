@@ -443,7 +443,7 @@ int main(int argc, const char * argv[]) {
 				phi		= rnd*2.0*PI;
 				xfocus	= r*cos(phi);
 				yfocus	= r*sin(phi);
-				// kdk how/shy does this work when zfocus is inf for collimated beam? 
+				// kdk how/why does this work when zfocus is inf for collimated beam? 
 				temp	= sqrt((x - xfocus)*(x - xfocus) + (y - yfocus)*(y - yfocus) + zfocus*zfocus);
 				ux		= -(x - xfocus)/temp;
 				uy		= -(y - yfocus)/temp;

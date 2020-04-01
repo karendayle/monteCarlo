@@ -38,17 +38,17 @@ SAVEON      = 1;        % 1 = save myname_T.bin, myname_H.mci
                         % 0 = don't save. Just check the program.
 
 myname      = 'skin3min';% name for files: myname_T.bin, myname_H.mci  
-time_min    = 2;      	% time duration of the simulation [min] <----- run time -----
+time_min    = 10;      	% time duration of the simulation [min] <----- run time -----
 nm          = 785;   	% desired wavelength of simulation
 Nbins       = 200;    	% # of bins in each dimension of cube 
-binsize     = 0.005; 	% size of each bin in [cm]. Increased by 10x for SERS-sensor scale
+binsize     = 0.01; 	% size of each bin in [cm]. Increased by 20x for SERS-sensor scale
 
 % Set Monte Carlo launch flags
 mcflag      = 0;     	% launch: 0 = uniform beam, 1 = Gaussian, 2 = isotropic pt. 
                         % 3 = rectangular beam (use xfocus,yfocus for x,y halfwidths)
 launchflag  = 0;        % 0 = let mcraman.c calculate launch trajectory
                         % 1 = manually set launch vector.
-boundaryflag = 2;       % 0 = no boundaries, 1 = escape at boundaries
+boundaryflag = 1;       % 0 = no boundaries, 1 = escape at boundaries
                         % 2 = escape at surface only. No x, y, bottom z
                         % boundaries
 
@@ -141,7 +141,8 @@ for iz=1:Nz % for every depth z(iz)
             if r<=sensorradius     	% if r is within vessel
                 for iy=1:Ny
                     if iy > Ny/4 & iy < 3*Ny/4 % sensor is centered and
-                        % spans half the structure
+                        % spans half the structure, which is 1cm out of 2cm
+                        % from y=-0.5 to y=+0.5 cm
                         T(iy,ix,iz) = 10; % SERS-active hydrogel tissue type
                         %fprintf('sensor at %d,%d,%d\n', ix,iy,iz);
                     end 
@@ -221,11 +222,12 @@ Tzy = Tzyx(:,:,Nx/2); % Tzy
 %%
 figure(1); clf
 sz = 12;  fz = 10; 
-imagesc(x,z,Tzx,[1 Nt])
+imagesc(x,z,Tzx,[1 Nt]);
 hold on
-set(gca,'fontsize',sz)
-xlabel('x [cm]')
-ylabel('z [cm]')
+set(gca,'fontsize',sz);
+xlabel('x [cm]');
+ylabel('z [cm]');
+title('Tissue structure: front view','FontSize',18);
 c = addLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue, mcflag, radius, zs, z);
 %%
 figure(2); clf
@@ -235,6 +237,7 @@ hold on
 set(gca,'fontsize',sz)
 xlabel('y [cm]')
 ylabel('z [cm]')
+title('Tissue structure: side view','FontSize',18);
 c = addLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue, mcflag, radius, zs, z);
 
 function c = addLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue, mcflag, radius, zs, z)   
