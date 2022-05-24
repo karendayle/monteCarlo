@@ -13,7 +13,7 @@
 %   tissue types and the beam being launched.
 %
 %   Uses
-%       makeTissueListRaman.m
+%       makeTissueListRamanDisc.m
 %
 %   To use, 
 %       1. Prepare makeTissueListRaman.m so that it contains the tissue
@@ -26,7 +26,11 @@
 %       respectively.
 %
 %  Steven L. Jacques. updated Aug 21, 2014.
-%  Dayle, adapted for Raman Feb, 2020.    
+%  Dayle Kotturi, adapted for Raman Feb, 2020.  
+%  Dayle Kotturi, adapted for a 6 mm diameter, 1 mm thick implant,
+%                 centered at (0,0) and with its top surface at z=0.2 cm.
+%                 Change laser beam to unfocused, collimated 4 mm diam
+%                 May 23, 2022
 
 clear
 format compact
@@ -37,8 +41,8 @@ home
 SAVEON      = 1;        % 1 = save myname_T.bin, myname_H.mci 
                         % 0 = don't save. Just check the program.
 
-myname      = 'skin10min';% name for files: myname_T.bin, myname_H.mci  
-time_min    = 10;      	% time duration of the simulation [min] <----- run time -----
+myname      = 'skindisc3min';% name for files: myname_T.bin, myname_H.mci  
+time_min    = 3;      	% time duration of the simulation [min] <----- run time -----
 nm          = 785;   	% desired wavelength of simulation
 Nbins       = 200;    	% # of bins in each dimension of cube 
 binsize     = 0.01; 	% size of each bin in [cm]. Increased by 20x for SERS-sensor scale
@@ -63,8 +67,8 @@ yfocus      = 0;        % set y,position of focus
 zfocus      = inf;    	% set z,position of focus (=inf for collimated beam)
 
 % only used if mcflag == 0 or 1 or 3 (not 2=isotropic pt.)
-radius      = 0.0300;   % 1/e radius of beam at tissue surface
-waist       = 0.0300;  	% 1/e radius of beam at focus
+radius      = 0.0200;   % 1/e radius of beam at tissue surface
+waist       = 0.0200;  	% 1/e radius of beam at focus
 
 % only used if launchflag == 1 (manually set launch trajectory):
 ux0         = 0.7;      % trajectory projected onto x axis
@@ -116,7 +120,7 @@ T = double(zeros(Ny,Nx,Nz));
 % 1. Start with making everything skin and then adjust where 
 T = T + 4;      % fill background with skin (dermis)
 
-zsurf = 0.0100;  % position of air/skin surface
+zsurf = 0.;  % position of air/skin surface <- shouldn't this be z=0?
 
 for iz=1:Nz % for every depth z(iz)
 
@@ -131,24 +135,26 @@ for iz=1:Nz % for every depth z(iz)
     end
     
     % Cylindrical SERS-active hydrogel @ xc, zc (2mm) , radius, oriented along y axis
-    xc      = 0;            % [cm], center of cylindrical sensor
-    zc      = 0.2;      	% [cm], center of cylindrical sensor 
-    sensorradius  = 0.0500; % [cm], cylindrical sensor radius
-    for ix=1:Nx
+    xc      = 0;        % [cm], center of cylindrical disc sensor
+    yc      = 0;      	% [cm], center of cylindrical disc sensor 
+    sensorradius  = 0.300; % [cm], cylindrical sensor radius
+    
+    izDepth = iz * 2/Nz;
+    if izDepth >= 0.2 && izDepth <= 0.3 % sensor is centered and   
+        for ix=1:Nx
             xd = x(ix) - xc;	% x distance from sensor center
-            zd = z(iz) - zc;   	% vessel, z distance from sensor center                
-            r  = sqrt(xd^2 + zd^2);	% r from vessel center
-            if r<=sensorradius     	% if r is within vessel
-                for iy=1:Ny
-                    if iy > Ny/4 & iy < 3*Ny/4 % sensor is centered and
-                        % spans half the structure, which is 1cm out of 2cm
-                        % from y=-0.5 to y=+0.5 cm
-                        T(iy,ix,iz) = 10; % SERS-active hydrogel tissue type
-                        %fprintf('sensor at %d,%d,%d\n', ix,iy,iz);
-                    end 
-                end %iy
-            end
-    end %ix 
+            for iy= 1:Ny
+                yd = y(iy) - yc;   	% y distance from sensor center                
+                r  = sqrt(xd^2 + yd^2);	% r from vessel center
+                if r<=sensorradius     	% if r is within vessel
+                    % spans half the structure, which is 1cm out of 2cm
+                    % from y=-0.5 to y=+0.5 cm
+                    T(iy,ix,iz) = 10; % SERS-active hydrogel tissue type
+                    %fprintf('sensor at %d,%d,%d\n', ix,iy,iz);
+                end
+            end % iy
+        end %ix
+    end % if izDepth
 end % iz
 
 

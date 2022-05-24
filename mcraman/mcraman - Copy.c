@@ -123,7 +123,6 @@ int main(int argc, const char * argv[]) {
 	double 	temp;           /* dummy variable */
 	int	bflag;          /* boundary flag:  0 = photon inside volume. 1 = outside volume */
 	int	CNT;		/* count of number of steps taken by current photon */
-	float MAXZ;     /* record the max depth achieved by each photon */
 	int 	totalsteps;	/* count of number of steps taken by all photons */
 	
 	/* mcxyz bin variables */
@@ -386,7 +385,6 @@ int main(int argc, const char * argv[]) {
 		W = 1.0;			    /* set photon weight to one */
 		photon_status = ALIVE;  /* Launch an ALIVE photon */
 		CNT = 0;
-		MAXZ = 0;
 		colorPH4 = 0; colorPH7 = 0; colorPH10 = 0; 	  /* kdk indicates original wavelength to begin */
 		
 		// Print out message about progress.
@@ -479,7 +477,6 @@ int main(int argc, const char * argv[]) {
 			}
 		} // end  use mcflag
 		/****************************/
-		if (z > MAXZ) MAXZ = z;
 		
 		/* Get tissue voxel properties of launchpoint.
 		 * If photon beyond outer edge of defined voxels, 
@@ -620,7 +617,6 @@ int main(int argc, const char * argv[]) {
 					x=tempx;					/* Update positions. */
 					y=tempy;
 					z=tempz;
-					if (z > MAXZ) MAXZ = z;
 					
 					/**** DROP
 					 Drop photon weight (W) into local bin.
@@ -656,7 +652,6 @@ int main(int argc, const char * argv[]) {
 					x += s*ux;
 					y += s*uy;
 					z += s*uz;
-					if (z > MAXZ) MAXZ = z;
 					
 					// pointers to voxel containing optical properties
 					ix = (int)(Nx/2 + x/dx);
@@ -759,7 +754,7 @@ int main(int argc, const char * argv[]) {
 		} while (photon_status == ALIVE);  /* end STEP_CHECK_HOP_SPIN */
 		/* if ALIVE, continue propagating */
 		/* If photon DEAD, record the number of steps it took and then launch new photon. */	
-		fprintf(fid2, "%ld \t%d %f\n",i_photon,CNT, MAXZ);
+		fprintf(fid2, "%ld \t%d\n",i_photon,CNT);
 		fprintf(fid3, "%f %f %f %d\n",x,y,z,colorPH4);
 		fprintf(fid4, "%f %f %f %d\n",x,y,z,colorPH7);
 		fprintf(fid5, "%f %f %f %d\n",x,y,z,colorPH10);

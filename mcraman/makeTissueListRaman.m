@@ -138,7 +138,7 @@ tissue(j).g     = 0.90;
 
 j=10;
 tissue(j).name  = 'SERS-active hydrogel';
-tissue(j).mua   = 1;
+tissue(j).mua   = 1; % this seems high kdk 5/19/2020
 tissue(j).mus   = 100;
 tissue(j).g     = 0.90;
 
