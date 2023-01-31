@@ -1,0 +1,1228 @@
+/********************************************
+ *  mcraman.c,	in ANSI Standard C programing language
+ *      Usage:  mcraman myname and myname_T.bin
+ *      which loads myname_H.mci, and saves myname_F.bin. 
+ *
+ *	created 2010, 2012 by
+ *	Steven L. JACQUES
+ *  Ting LI
+ *	Oregon Health & Science University
+ *
+ *  USAGE   mcraman2 myname
+ *              where myname is the user's choice. 
+ *          The program reads two files prepared by user:
+ *                  myname_H.mci    = header input file for mcraman
+ *                  myname_T.bin    = tissue structure file
+ *          The output will be written to 3 files:
+ *                  myname_props.m     = optical properties  (mua, mus, g for each tissue type)
+ *                  myname_F.bin    = fluence rate output F[i] [W/cm^2 per W delivered]
+ *
+ *  The MATLAB program maketissue.m can create the two input files (myname_H.mci, myname_T.bin).
+ *
+ *  The MATLAB program lookmcxyz.m can read the output files and display
+ *          1. Fluence rate F [W/cm^2 per W delivered]
+ *          2. Deposition rate A [W/cm^3 per W delivered].
+ *
+ *  Log:
+ *  Written by Ting based on Steve's mcsub.c., 2010.
+ *      Use Ting's FindVoxelFace().
+ *	Use Steve's FindVoxelFace(), Dec. 30, 2010.
+ *  Reorganized by Steve. May 8, 2012:
+ *      Reads input files, outputs binary files.
+ *  updated: 1 June, 2017 slj
+ *  adapted for Raman from mcxyz.c: 17 October, 2019 dayle
+ *********************************************/
+
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <time.h>
+
+#define Ntiss		19          /* Number of tissue types. */
+#define STRLEN 		32          /* String length. */
+#define ls		1.0E-7      /* Moving photon a little bit off the voxel face */
+#define	PI		3.1415926
+#define	LIGHTSPEED	2.997925E10 /* in vacuo speed of light [cm/s] */
+#define ALIVE		1   		/* if photon not yet terminated */
+#define DEAD		0    		/* if photon is to be terminated */
+#define THRESHOLD	0.01		/* used in roulette */
+#define CHANCE		0.1  		/* used in roulette */
+#define Boolean		char
+#define SQR(x)		(x*x) 
+#define SIGN(x)		((x)>=0 ? 1:-1)
+#define RandomNum	(double) RandomGen(1, 0, NULL) /* Calls for a random number. */
+#define COS90D		1.0E-6          /* If cos(theta) <= COS90D, theta >= PI/2 - 1e-6 rad. */
+#define ONE_MINUS_COSZERO 1.0E-12   /* If 1-cos(theta) <= ONE_MINUS_COSZERO, fabs(theta) <= 1e-6 rad. */
+/* If 1+cos(theta) <= ONE_MINUS_COSZERO, fabs(PI-theta) <= 1e-6 rad. */
+/* Raman parameters */
+#define P_RAMAN		(0.01) // kdk artificially high, but necessary to make model work. Normalize later.
+#define N_TARGETS   (5)
+#define SERS        (10)
+
+/* DECLARE FUNCTIONS */
+double RandomGen(char Type, long Seed, long *Status);  
+/* Random number generator */
+Boolean SameVoxel(double x1,double y1,double z1, double x2, double y2, double z2, double dx,double dy,double dz);
+/* Asks,"In the same voxel?" */
+double max2(double a, double b);
+double min2(double a, double b);
+double min3(double a, double b, double c);
+double FindVoxelFace(double x1,double y1,double z1, double x2, double y2, double z2,double dx,double dy,double dz, double ux, double uy, double uz);
+double FindVoxelFace2(double x1,double y1,double z1, double x2, double y2, double z2,double dx,double dy,double dz, double ux, double uy, double uz);
+/* How much step size will the photon take to get the first voxel crossing in one single long step? */
+double RFresnel(double n1, double n2, double ca1, double *ca2_Ptr);
+
+int main(int argc, const char * argv[]) {
+    
+    if (argc==0) {
+        printf("assuming you've compiled mcxyz.c as gomcxyz ...\n");
+		printf("USAGE: gomcxyz name\n"); // haha argv[0] doesn't work under windows
+		printf("which will load the files name_H.mci and name_T.bin\n");
+		printf("and run the Monte Carlo program.\n");
+		printf("Yields  name_F.bin, which holds the fluence rate distribution.\n");
+        return 0;
+    }
+	
+	/* Propagation parameters */
+	double	x, y, z;        /* photon position */
+	double	ux, uy, uz;     /* photon trajectory as cosines */
+	double  uxx, uyy, uzz;	/* temporary values used during SPIN */
+	double	s;              /* step sizes. s = -log(RND)/mus [cm] */
+	double  sleft;          /* dimensionless */
+	double	costheta;       /* cos(theta) */
+	double  sintheta;       /* sin(theta) */
+	double	cospsi;         /* cos(psi) */
+	double  sinpsi;         /* sin(psi) */
+	double	psi;            /* azimuthal angle */
+	long	i_photon;       /* current photon */
+	double	W;              /* photon weight */
+	double	absorb;         /* weighted deposited in a step due to absorption */
+	short   photon_status;  /* flag = ALIVE=1 or DEAD=0 */
+	Boolean sv;             /* Are they in the same voxel? */
+	
+	/* other variables */
+	double	mua;            /* absorption coefficient [cm^-1] */
+	double	mus;            /* scattering coefficient [cm^-1] */
+	double	g;              /* anisotropy [-] */
+	double	Nphotons;       /* number of photons in simulation */
+	
+	/* launch parameters */
+	int	mcflag, launchflag, boundaryflag;
+	float	xfocus, yfocus, zfocus;
+	float	ux0, uy0, uz0;
+	float	radius;
+	float	waist;
+	
+	/* dummy variables */
+	double  rnd;            /* assigned random value 0-1 */
+	double	r, phi;		/* dummy values */
+	long	i,j,NN;         /* dummy indices */
+	double	tempx, tempy, tempz; /* temporary variables, used during photon step. */
+	int 	ix, iy, iz;     /* Added. Used to track photons */
+	double 	temp;           /* dummy variable */
+	int	bflag;          /* boundary flag:  0 = photon inside volume. 1 = outside volume */
+	int	CNT;		/* count of number of steps taken by current photon */
+	float MAXZ;     /* record the max depth achieved by each photon */
+	int 	totalsteps;	/* count of number of steps taken by all photons */
+	
+	/* mcxyz bin variables */
+	float	dx, dy, dz;     /* bin size [cm] */
+	int	Nx, Ny, Nz, Nt; /* # of bins */
+	float	xs, ys, zs;	/* launch position */
+    
+	/* time */
+	float	time_min;      	// Requested time duration of computation.
+	time_t	now;
+	double	start_time, finish_time, temp_time; /* for clock() */
+	
+	/* tissue parameters */
+	char	tissuename[50][32];
+    int Nw;
+    int wl;
+    int nm[N_TARGETS] = {0, 0, 0, 0, 0};
+	float 	muav[N_TARGETS][Ntiss];            // muav[0:Nw-1][0:Ntiss-1], absorption coefficient of ith tissue type, 1/29/23 kdk: for each of the wavelengths
+	float 	musv[N_TARGETS][Ntiss];            // scattering coeff. 
+	float 	gv[N_TARGETS][Ntiss];              // anisotropy of scattering
+
+	/* Raman parameters */
+	int	n_targetsPH4[N_TARGETS] = {0, 0, 0, 0, 0};
+	int	n_targetsPH7[N_TARGETS] = {0, 0, 0, 0, 0};
+	int	n_targetsPH10[N_TARGETS] = {0, 0, 0, 0, 0};
+	int	n_inelastic = 0;
+	int	max_steps = 0;
+	int	this_photon_was_raman_scattered = 0;	
+	float target_bin_pH4_values[N_TARGETS] = {(20./56.), ((20.+3.)/56.), ((20.+3.+24.)/56.), ((20.+3.+24.+4.)/56.), 1.0}; //explained @line ~532
+	float target_bin_pH7_values[N_TARGETS] = {(20./56.), ((20.+5.)/56.), ((20.+5.+24.)/56.), ((20.+5.+24.+2.)/56.), 1.0}; 	
+	float target_bin_pH10_values[N_TARGETS] = {(20./56.), ((20.+6.)/56.), ((20.+6.+24.)/56.), ((20.+6.+24.+1.)/56.),1.0};
+	// These are the same, but seeing some round off errors so that # photons at ref peaks vary slightly across pH -- they shouldn't
+	//float target_bin_pH4_values[N_TARGETS] = {0.357, 0.411, 0.839, 0.911, 1.0}; //explained @line ~532
+	//float target_bin_pH7_values[N_TARGETS] = {0.357, 0.446, 0.875, 0.911, 1.0}; 	
+	//float target_bin_pH10_values[N_TARGETS] = {0.357, 0.464, 0.893, 0.911, 1.0};
+	int	targets[N_TARGETS] = {0, 0, 0, 0, 0};
+	int n_dblScatteringCandidates = 0;
+	int colorPH4, colorPH7, colorPH10; // keeps track of wavelength of photon. initially it's 0, then 1-5 if inelastically scattered
+    long n_scattering_events = 0;
+
+	
+	/* Input/Output */
+	char   	myname[STRLEN];	    // Holds the user's choice of myname, used in input and output files. 
+	char	filename[STRLEN];   // filename where tissue parameters are
+	FILE*	fid=NULL;           // file ID pointer 
+	char	filename2[STRLEN];  // filename for writing debug output, incl #steps taken by each photon.
+	FILE*	fid2=NULL;          // file ID pointer 
+	char    buf[32];            // buffer for reading header.dat
+	char	filename3[STRLEN];  // filename for writing final position of each photon.
+	FILE*	fid3=NULL;          // file ID pointer
+	char	filename4[STRLEN];  // filename for writing final position of each photon.
+	FILE*	fid4=NULL;          // file ID pointer
+	char	filename5[STRLEN];  // filename for writing final position of each photon.
+	FILE*	fid5=NULL;          // file ID pointer
+	
+	strcpy(myname, argv[1]);    // acquire name from argument of function call by user.
+	printf("name = %s\n",myname);
+    
+	/**** INPUT FILES *****/
+	/* IMPORT myname_H.mci */
+	strcpy(filename,myname);
+	strcat(filename, "_H.mci");
+	fid = fopen(filename,"r");
+	fgets(buf, 32, fid);
+	
+	/**** OUTPUT FILES *****/
+	// number of steps by photon
+	strcpy(filename2,myname);
+	strcat(filename2, "_STEPS.txt");
+	fid2 = fopen(filename2,"w");
+	//fprintf(fid2, "photon#, steps\n");
+	
+	// final position data for pH4
+    strcpy(filename3,myname);
+	strcat(filename3, "-ENDPOS-PH4.txt");
+	fid3 = fopen(filename3,"w");
+	//fprintf(fid3, "Final x y z of each photon\n");
+	
+	// final position data for pH7
+    strcpy(filename4,myname);
+	strcat(filename4, "-ENDPOS-PH7.txt");
+	fid4 = fopen(filename4,"w");
+	//fprintf(fid3, "Final x y z of each photon\n");
+	
+	// final position data for pH10
+    strcpy(filename5,myname);
+	strcat(filename5, "-ENDPOS-PH10.txt");
+	fid5 = fopen(filename5,"w");
+	//fprintf(fid3, "Final x y z of each photon\n");
+	
+    // 1/30/23 kdk: merge prints of var into just after their scan
+	// run parameters
+	sscanf(buf, "%f", &time_min); // desired time duration of run [min]
+	fgets(buf, 32, fid);
+	sscanf(buf, "%d", &Nx);  // # of bins  
+	fgets(buf, 32,fid);
+	sscanf(buf, "%d", &Ny);  // # of bins
+	fgets(buf, 32,fid);
+	sscanf(buf, "%d", &Nz);  // # of bins   
+    
+	printf("time_min = %0.2f min\n",time_min);
+	printf("Nx = %d, dx = %0.4f [cm]\n",Nx,dx);
+	printf("Ny = %d, dy = %0.4f [cm]\n",Ny,dy);
+	printf("Nz = %d, dz = %0.4f [cm]\n",Nz,dz);
+    
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &dx);	 // size of bins [cm]
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &dy);	 // size of bins [cm] 
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &dz);	 // size of bins [cm] 
+
+	// launch parameters
+	fgets(buf, 32,fid);
+	sscanf(buf, "%d", &mcflag);  // mcflag, 0 = uniform, 1 = Gaussian, 2 = iso-pt
+	fgets(buf, 32,fid);
+	sscanf(buf, "%d", &launchflag);  // launchflag, 0 = ignore, 1 = manually set
+	fgets(buf, 32,fid);
+	sscanf(buf, "%d", &boundaryflag);  // 0 = no boundaries, 1 = escape at all boundaries, 2 = escape at surface only
+	
+    printf("mcflag = %d\n",mcflag);
+	if (mcflag==0) printf("launching uniform flat-field beam\n");
+	if (mcflag==1) printf("launching Gaussian beam\n");
+	if (mcflag==2) printf("launching isotropic point source\n");
+	if (mcflag==3) printf("launching square source\n");
+
+
+    
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &xs);  // initial launch point
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &ys);  // initial launch point 
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &zs);  // initial launch point
+    
+    printf("xs = %0.4f [cm]\n",xs);
+	printf("ys = %0.4f [cm]\n",ys);
+	printf("zs = %0.4f [cm]\n",zs);
+    
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &xfocus);  // xfocus
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &yfocus);  // yfocus
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &zfocus);  // zfocus
+
+	printf("xfocus = %0.4f [cm]\n",xfocus);
+	printf("yfocus = %0.4f [cm]\n",yfocus);
+	printf("zfocus = %0.2e [cm]\n",zfocus);
+
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &ux0);  // ux trajectory
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &uy0);  // uy trajectory
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &uz0);  // uz trajectory
+
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &radius);  // radius
+	fgets(buf, 32,fid);
+	sscanf(buf, "%f", &waist);  // waist
+    
+	if (launchflag==1) {
+		printf("Launchflag ON, so launch the following:\n");
+		printf("ux0 = %0.4f [cm]\n",ux0);
+		printf("uy0 = %0.4f [cm]\n",uy0);
+		printf("uz0 = %0.4f [cm]\n",uz0);
+	}
+	else {
+		printf("Launchflag OFF, so program calculates launch angles.\n");
+		printf("radius = %0.4f [cm]\n",radius);
+		printf("waist  = %0.4f [cm]\n",waist);
+	}
+	if (boundaryflag==0)
+		printf("boundaryflag = 0, so no boundaries.\n");
+	else if (boundaryflag==1)
+		printf("boundaryflag = 1, so escape at all boundaries.\n");    
+	else if (boundaryflag==2)
+		printf("boundaryflag = 2, so escape at surface only.\n");    
+	else{
+		printf("improper boundaryflag (%d). quit.\n", boundaryflag);
+		return 0;
+	}
+	// tissue optical properties
+	fgets(buf, 32,fid);
+	sscanf(buf, "%d", &Nt);				// # of tissue types in tissue list
+    printf("# of tissues available, Nt = %d\n",Nt);
+    
+    fgets(buf, 32,fid);
+	sscanf(buf, "%d", &Nw);				// # of wavelengths (excitation, peak 1, peak 2, ...
+    printf("# of wavelengths of interest, Nw = %d\n",Nw);
+        
+    // 1/29/23 kdk: read in the wavelengths. This c code has adopted Matlab convention that first index is 1
+    // but here, for 5 wavelengths, we need to make use of 0-th index (or else increase size of array by 1)
+    for (j=0; j<Nw; j++) {
+        fgets(buf, 32, fid);
+        sscanf(buf, "%d", &nm[j]);	// wavelength of interest excitation, peak 1, peak 2, ...
+    } 
+    for (j=0; j<Nw; j++) {
+        printf("wavelength[%d] = %d\n", j, nm[j]);
+    }
+    
+    for (j=0; j<Nw; j++) {
+	    for (i=1; i<=Nt; i++) {
+		    fgets(buf, 32, fid);
+		    sscanf(buf, "%f", &muav[j][i]);	// absorption coeff [cm^-1]
+		    fgets(buf, 32, fid);
+		    sscanf(buf, "%f", &musv[j][i]);	// scattering coeff [cm^-1]
+		    fgets(buf, 32, fid);
+		    sscanf(buf, "%f", &gv[j][i]);	// anisotropy of scatter [dimensionless]
+            //printf("muav[%ld,%ld] = %0.4f [cm^-1]\n",j,i,muav[j][i]);
+		    //printf("musv[%ld,%ld] = %0.4f [cm^-1]\n",j,i,musv[j][i]);
+		    //printf("  gv[%ld,%ld] = %0.4f [--]\n\n",j,i,gv[j][i]);
+        }
+	}    
+	fclose(fid);
+
+	// SAVE optical properties, for later use by MATLAB.
+	strcpy(filename,myname);
+	strcat(filename,"_props.m");
+	fid = fopen(filename,"w");
+    for (j=1; j<=Nw; j++) {
+	    for (i=1; i<=Nt; i++) {
+		    fprintf(fid,"muav(%ld,%ld) = %0.4f;\n",j,i,muav[j][i]);
+		    fprintf(fid,"musv(%lc,%ld) = %0.4f;\n",j,i,musv[j][i]);
+		    fprintf(fid,"gv(%ld,%ld) = %0.4f;\n\n",j,i,gv[j][i]);
+        }
+	}
+	fclose(fid);
+    
+	/* IMPORT BINARY TISSUE FILE */
+	char 	*v=NULL;
+	float 	*F=NULL;
+	float	*R=NULL;
+	int 	type;
+	NN = Nx*Ny*Nz;
+	v  = ( char *)malloc(NN*sizeof(char));  /* tissue structure */
+	F  = (float *)malloc(NN*sizeof(float));	/* relative fluence rate [W/cm^2/W.delivered] */
+	// NOT READY: R  = (float *)malloc(NN*sizeof(float));	/* escaping flux [W/cm^2/W.delivered] */
+    
+	// read binary file
+	strcpy(filename,myname);
+	strcat(filename, "_T.bin");
+	fid = fopen(filename, "rb");
+	fread(v, sizeof(char), NN, fid);
+	fclose(fid);
+    
+	// Show tissue on screen, along central z-axis, by listing tissue type #'s.
+	iy = Ny/2;
+	ix = Nx/2;
+	printf("central axial profile of tissue types:\n");
+	for (iz=0; iz<Nz; iz++) {
+		i = (long)(iz*Ny*Nx + ix*Ny + iy);
+		printf("%d",v[i]);
+	}
+	printf("\n\n");
+    
+	/**************************
+	 * ============================ MAJOR CYCLE ========================
+	 **********/
+	start_time = clock();
+	now = time(NULL);
+	printf("%s\n", ctime(&now));	
+	
+	/**** INITIALIZATIONS 
+	 *****/
+	RandomGen(0, -(int)time(NULL)%(1<<15), NULL); /* initiate with seed = 1, or any long integer. */
+	for(j=0; j<NN;j++) 	F[j] = 0; // ensure F[] starts empty.	
+	
+	/**** RUN
+	 Launch N photons, initializing each one before progation.
+	 *****/
+	printf("------------- Begin Monte Carlo -------------\n");
+	printf("%s\n",myname);
+	printf("requesting %0.1f min\n",time_min);
+	Nphotons = 1000; // will be updated to achieve desired run time, time_min.
+	i_photon = 0;
+
+	do {
+		/**** LAUNCH 
+		 Initialize photon position and trajectory.
+		 *****/
+
+		i_photon += 1;			/* increment photon count */
+		W = 1.0;			    /* set photon weight to one */
+		photon_status = ALIVE;  /* Launch an ALIVE photon */
+		CNT = 0;
+		MAXZ = 0;
+		colorPH4 = 0; colorPH7 = 0; colorPH10 = 0; 	  /* kdk indicates original wavelength to begin */
+		
+		// Print out message about progress.
+		if ((i_photon>1000) & (fmod(i_photon, (int)(Nphotons/100))  == 0)) {
+			temp = i_photon/Nphotons*100;
+			//printf("%0.1f%% \t\tfmod = %0.3f\n", temp,fmod(temp, 10.0));
+			if ((temp<10) | (temp>90)){
+				printf("%0.0f%% done\n", i_photon/Nphotons*100);
+			}
+			else if(fmod(temp, 10.0)>9)
+				printf("%0.0f%% done\n", i_photon/Nphotons*100);
+		}
+        
+		if (i_photon==1) // start timing
+			temp_time = clock();
+		
+		// At 1000th photon, update Nphotons to achieve desired runtime (time_min)
+		if (i_photon==1000) {    // kdk time how long it takes to process 1000 photons and then 
+								 // adjust the number of photons that will be processed based
+								 // on the desired run time
+			finish_time = clock();
+			Nphotons = (long)( time_min*60*999*CLOCKS_PER_SEC/(finish_time-temp_time) );
+			printf("Nphotons = %0.0f for simulation time = %0.2f min\n",Nphotons,time_min);
+		}
+		
+		/**** SET SOURCE 
+		 * Launch collimated beam at x,y center. 
+		 ****/
+	
+		/****************************/
+		/* Initial position. */		
+		
+		/* trajectory */
+		if (launchflag==1) { // manually set launch
+			x	= xs; 
+			y	= ys;
+			z	= zs;
+			ux	= ux0;
+			uy	= uy0;
+			uz	= uz0;
+		}
+		else { // use mcflag
+			if (mcflag==0) { // uniform beam
+				// set launch point and width of beam
+				while ((rnd = RandomGen(1,0,NULL)) <= 0.0); // avoids rnd = 0
+				r		= radius*sqrt(rnd); // radius of beam at launch point
+				while ((rnd = RandomGen(1,0,NULL)) <= 0.0); // avoids rnd = 0
+				phi		= rnd*2.0*PI;
+				x		= xs + r*cos(phi);
+				y		= ys + r*sin(phi);
+				z		= zs;
+				// set trajectory toward focus
+				while ((rnd = RandomGen(1,0,NULL)) <= 0.0); // avoids rnd = 0
+				r		= waist*sqrt(rnd); // radius of beam at focus
+				while ((rnd = RandomGen(1,0,NULL)) <= 0.0); // avoids rnd = 0
+				phi		= rnd*2.0*PI;
+				xfocus	= r*cos(phi);
+				yfocus	= r*sin(phi);
+				// kdk how/why does this work when zfocus is inf for collimated beam? 
+				temp	= sqrt((x - xfocus)*(x - xfocus) + (y - yfocus)*(y - yfocus) + zfocus*zfocus);
+				ux		= -(x - xfocus)/temp;
+				uy		= -(y - yfocus)/temp;
+				uz		= sqrt(1 - ux*ux - uy*uy);
+			}
+			else if (mcflag==2) { // isotropic pt source
+				costheta = 1.0 - 2.0*RandomGen(1,0,NULL);
+				sintheta = sqrt(1.0 - costheta*costheta);
+				psi = 2.0*PI*RandomGen(1,0,NULL);
+				cospsi = cos(psi);
+				if (psi < PI)
+					sinpsi = sqrt(1.0 - cospsi*cospsi); 
+				else
+					sinpsi = -sqrt(1.0 - cospsi*cospsi);
+				x = xs;
+				y = ys;
+				z = zs;
+				ux = sintheta*cospsi;
+				uy = sintheta*sinpsi;
+				uz = costheta;
+			}
+			else if (mcflag==3) { // rectangular source collimated
+				while ((rnd = RandomGen(1,0,NULL)) <= 0.0); // avoids rnd = 0
+				x = radius*(rnd*2-1); // use radius to specify x-halfwidth of rectangle
+				while ((rnd = RandomGen(1,0,NULL)) <= 0.0); // avoids rnd = 0
+				y = radius*(rnd*2-1); // use radius to specify y-halfwidth of rectangle
+				z = zs;
+				ux = 0.0;
+				uy = 0.0;
+				uz = 1.0; // collimated beam
+			}
+		} // end  use mcflag
+		/****************************/
+		if (z > MAXZ) MAXZ = z;
+		
+		/* Get tissue voxel properties of launchpoint.
+		 * If photon beyond outer edge of defined voxels, 
+		 * the tissue equals properties of outermost voxels.
+		 * Therefore, set outermost voxels to infinite background value.
+		 */
+		ix = (int)(Nx/2 + x/dx);
+		iy = (int)(Ny/2 + y/dy);
+		iz = (int)(z/dz);        
+		if (ix>=Nx) ix=Nx-1;
+		if (iy>=Ny) iy=Ny-1;
+		if (iz>=Nz) iz=Nz-1;
+		if (ix<0)   ix=0;
+		if (iy<0)   iy=0;
+		if (iz<0)   iz=0;		
+		/* Get the tissue type of located voxel */
+		i	= (long)(iz*Ny*Nx + ix*Ny + iy);
+		type	= v[i];
+        wl = 1; // 1/29/23 kdk start with excitation wavelength
+		mua 	= muav[wl][type];
+		mus 	= musv[wl][type];
+		g 	= gv[wl][type];
+		
+		bflag = 1; // initialize as 1 = inside volume, but later check as photon propagates.
+		this_photon_was_raman_scattered = 0;
+	
+		/* HOP_DROP_SPIN_CHECK
+		 Propagate one photon until it dies as determined by ROULETTE.
+		 *******/
+		do {
+			
+			/**** HOP
+			 Take step to new position
+			 s = dimensionless stepsize
+			 x, uy, uz are cosines of current photon trajectory
+			 *****/
+			while ((rnd = RandomNum) <= 0.0);   /* yields 0 < rnd <= 1 */
+			sleft	= -log(rnd);				/* dimensionless step */
+			CNT += 1;
+			n_scattering_events++;
+			
+			do{  // while sleft>0   
+				s     = sleft/mus;				/* Step size [cm].*/
+				tempx = x + s*ux;				/* Update positions. [cm] */
+				tempy = y + s*uy;	
+				tempz = z + s*uz;
+				
+				if (type == SERS) {
+					/**** RAMAN by dayle October 2019
+					 First check this photon to see that it hasn't already been Ramaned. Use a flag for this
+					 that gets reset each time.
+					 Get a random number between 0 and 1 for the Raman scattering event.
+					 Compare this number against the Probability of a Raman event (0.01 from the lit).
+					 If number <= Praman, then it's Raman. 1) Record the photon number (cuz it's so rare 
+					 that we are saying it can't happen again to this same photon). Actually this is not needed.
+					 We stay with a photon until it's gone, so we can just have a local flag and reset it each
+					 photon.  
+					 2) Go get a random wavelength for this photon. Let's say only stokes and map the number as ...
+					 wait, isn't this the part where I use area under the curve for the probability 
+					 of the new wavelength? 
+					 Now for the last part, handle the target part. This sim must be done once per target
+					 (there are 4). Depending which target it is, there will be a diff area under curve 
+					 to set the probability. I.e. it's more likely to get a value for the reference peak
+					 than it is to get one of the tiny peaks. 
+
+					Feb 2020
+					This whole section needs to move into the preceding "do...while" AND be only executed 
+					when type = SERS-active hydrogel
+					 ****/
+					if (this_photon_was_raman_scattered) {
+						/* Assumption: >1 Raman event for a single photon is not allowed, 
+						   so skip this part if a photon has already been inelastically scattered.
+						 */
+						n_dblScatteringCandidates++; // 1/30/23 kdk: this is just for info; it is not used
+					}
+					else {
+						rnd = RandomNum;
+						if (rnd < P_RAMAN) {
+							n_inelastic++; // 1/30/23 kdk: this is the # of the raman scattering event
+							this_photon_was_raman_scattered = 1;
+							/* 	Based on the area under the curve of the spectrum, determine the new
+								wavelength. There are a set bins mapping the probability of a target
+								wavelength to the area under the curve at, near this target over the 
+								area under the entire spectrum.
+								Roughly, for 4,MBA, if the total area under the curve is 14, then the
+								probabilities tare:
+								Wavelength Wavenumber pH4      Bin         pH7      Bin         pH10      Bin
+								(nm)       (cm^-1)    Prob'ty  range       Prob'ty  range       Prob'ty   range
+								=================================================================================
+                                1          excitation
+								2          1072	      5/14     0.000-0.357 5/14     0.000-0.357 5/14      0.000-0.357
+								3          1430	      3/28     0.357-0.411 5/56     0.357-0.446 3/28      0.357-0.464
+								4          1582	      6/14     0.411-0.839 6/14     0.446-0.875 6/14      0.464-0.893
+								5          1702	      1/14     0.839-0.911 1/28     0.875-0.911 1/56      0.893-0.911
+								N/A        other      5/56     0.911-1.000 5/56     0.911-1.000 5/56      0.911-1.000
+							*/
+
+							rnd = RandomNum;
+							int foundPH4 = 0;  
+							i = 0;
+							while (!foundPH4 && i < N_TARGETS) {
+								if (rnd < target_bin_pH4_values[i]) { 
+									//printf("%f matches %d\n", rnd, i);
+									n_targetsPH4[i] = n_targetsPH4[i] + 1; // keep track of matches to all 5 targets
+									foundPH4 = 1;
+									colorPH4 = i+1;
+                                    wl = i+1; // 1/29/23 kdk update wavelength to match new wavelength
+                                    mua 	= muav[wl][type]; // 1/29/23 kdk update scattering parameters to match new wavelength
+                                    mus 	= musv[wl][type];
+                                    g 	    = gv[wl][type];
+                                    // 1/29/23 kdk: save previous parameters to orig in order to do comparison modeling.
+								}
+								i++;
+							}
+							int foundPH7 = 0;
+							i = 0;
+							while (!foundPH7 && i < N_TARGETS) {
+								if (rnd < target_bin_pH7_values[i]) { 
+									//printf("%f matches %d\n", rnd, i);
+									n_targetsPH7[i] = n_targetsPH7[i] + 1; // keep track of matches to all 5 targets
+									foundPH7 = 1;
+									colorPH7 = i+1;
+                                    wl = i+1; // 1/29/23 kdk update wavelength to match new wavelength
+                                    mua 	= muav[wl][type]; // 1/29/23 kdk update scattering parameters to match new wavelength
+                                    mus 	= musv[wl][type];
+                                    g 	    = gv[wl][type];
+                                    // 1/29/23 kdk: save previous parameters to orig in order to do comparison modeling.
+								}
+								i++;
+							}
+							int foundPH10 = 0;
+							i = 0;
+							while (!foundPH10 && i < N_TARGETS) {
+								if (rnd < target_bin_pH10_values[i]) { 
+									//printf("%f matches %d\n", rnd, i);
+									n_targetsPH10[i] = n_targetsPH10[i] + 1; // keep track of matches to all 5 targets
+									foundPH10 = 1;
+									colorPH10 = i+1;
+                                    wl = i+1; // 1/29/23 kdk update wavelength to match new wavelength
+                                    mua 	= muav[wl][type]; // 1/29/23 kdk update scattering parameters to match new wavelength
+                                    mus 	= musv[wl][type];
+                                    g 	    = gv[wl][type];
+                                    // 1/29/23 kdk: save previous parameters to orig in order to do comparison modeling. 
+                                    // Actually this is hard since photon could leave voxel on diff iter given other params. 
+                                    // It would be better to add a new photon at this step and mark it as "orig" or sth and
+                                    // let it run its course. 
+								}
+								i++;
+							}
+
+						} // Random number indicates that Raman event has occurred
+					} // Handle possibility of inelastic scattering  
+				} // Handle SERS-active hydrogel
+				
+				sv = SameVoxel(x,y,z, tempx, tempy, tempz, dx,dy,dz);
+				if (sv) /* photon in same voxel */
+				{  
+					x=tempx;					/* Update positions. */
+					y=tempy;
+					z=tempz;
+					if (z > MAXZ) MAXZ = z;
+					
+					/**** DROP
+					 Drop photon weight (W) into local bin.
+					 *****/
+					absorb = W*(1 - exp(-mua*s));	/* photon weight absorbed at this step */
+					W -= absorb;		/* decrement WEIGHT by amount absorbed */
+					// If photon within volume of heterogeneity, deposit energy in F[]. 
+					// Normalize F[] later, when save output. 
+					if (bflag) F[i] += absorb;	// only save data if blag==1, i.e., photon inside simulation cube
+					
+					/* Update sleft */
+					sleft = 0;		/* dimensionless step remaining */
+				}
+				else /* photon has crossed voxel boundary */
+				{
+					/* step to voxel face + "littlest step" so just inside new voxel. */
+					s = ls + FindVoxelFace2(x,y,z, tempx,tempy,tempz, dx,dy,dz, ux,uy,uz);
+					
+					/**** DROP
+					 Drop photon weight (W) into local bin.
+					 *****/
+					absorb = W*(1-exp(-mua*s));   /* photon weight absorbed at this step */
+					W -= absorb;                  /* decrement WEIGHT by amount absorbed */
+					// If photon within volume of heterogeneity, deposit energy in F[]. 
+					// Normalize F[] later, when save output. 
+					if (bflag) F[i] += absorb;	
+					
+					/* Update sleft */
+					sleft -= s*mus;  /* dimensionless step remaining */
+					if (sleft<=ls) sleft = 0;
+					
+					/* Update positions. */
+					x += s*ux;
+					y += s*uy;
+					z += s*uz;
+					if (z > MAXZ) MAXZ = z;
+					
+					// pointers to voxel containing optical properties
+					ix = (int)(Nx/2 + x/dx);
+					iy = (int)(Ny/2 + y/dy);
+					iz = (int)(z/dz);
+			
+					bflag = 1;  // Boundary flag. Initialize as 1 = inside volume, then check.
+					if (boundaryflag==0) { // Infinite medium.
+								// Check if photon has wandered outside volume.
+						// If so, set tissue type to boundary value, but let photon wander.
+						// Set blag to zero, so DROP does not deposit energy.
+						if (iz>=Nz) {iz=Nz-1; bflag = 0;}
+						if (ix>=Nx) {ix=Nx-1; bflag = 0;}
+						if (iy>=Ny) {iy=Ny-1; bflag = 0;}
+						if (iz<0)   {iz=0;    bflag = 0;}
+						if (ix<0)   {ix=0;    bflag = 0;}
+						if (iy<0)   {iy=0;    bflag = 0;}
+					}
+					else if (boundaryflag==1) { // Escape at boundaries
+						if (iz>=Nz) {iz=Nz-1; photon_status = DEAD; sleft=0;}
+						if (ix>=Nx) {ix=Nx-1; photon_status = DEAD; sleft=0;}
+						if (iy>=Ny) {iy=Ny-1; photon_status = DEAD; sleft=0;}
+						if (iz<0)   {iz=0;    photon_status = DEAD; sleft=0;}
+						if (ix<0)   {ix=0;    photon_status = DEAD; sleft=0;}
+						if (iy<0)   {iy=0;    photon_status = DEAD; sleft=0;}
+					}
+					else if (boundaryflag==2) { // Escape at top surface, no x,y bottom z boundaries
+						if (iz>=Nz) {iz=Nz-1; bflag = 0;} // kdk: if photon has gone past last bin, put it in last bin
+						if (ix>=Nx) {ix=Nx-1; bflag = 0;} // kdk: as z
+						if (iy>=Ny) {iy=Ny-1; bflag = 0;} // kdk: as z and x
+						if (iz<0)   {iz=0;    photon_status = DEAD; sleft=0;}
+						if (ix<0)   {ix=0;    bflag = 0;}
+						if (iy<0)   {iy=0;    bflag = 0;}
+					}
+					
+					// update tissue type now for next time, now that we have left the voxel
+					i    = (long)(iz*Ny*Nx + ix*Ny + iy);
+					type = v[i];
+					mua  = muav[wl][type]; // 1/29/23 kdk: TO DO add dimension
+					mus  = musv[wl][type]; // 1/29/23 kdk: TO DO add dimension
+					g    = gv[wl][type]; // 1/29/23 kdk: TO DO add dimension
+			
+				} //(sv) /* same voxel */
+		
+			} while(sleft>0); //do...while
+			
+			/**** SPIN 
+			 Scatter photon into new trajectory defined by theta and psi.
+			 Theta is specified by cos(theta), which is determined 
+			 based on the Henyey-Greenstein scattering function.
+			 Convert theta and psi into cosines ux, uy, uz. 
+			 *****/
+			/* Sample for costheta */
+			rnd = RandomNum;
+			if (g == 0.0)
+				costheta = 2.0*rnd - 1.0;
+			else {
+				double temp = (1.0 - g*g)/(1.0 - g + 2*g*rnd);
+				costheta = (1.0 + g*g - temp*temp)/(2.0*g);
+			}
+			sintheta = sqrt(1.0 - costheta*costheta); /* sqrt() is faster than sin(). */
+			
+			/* Sample psi. */
+			psi = 2.0*PI*RandomNum;
+			cospsi = cos(psi);
+			if (psi < PI)
+				sinpsi = sqrt(1.0 - cospsi*cospsi);     /* sqrt() is faster than sin(). */
+			else
+				sinpsi = -sqrt(1.0 - cospsi*cospsi);
+			
+			/* New trajectory. */
+			if (1 - fabs(uz) <= ONE_MINUS_COSZERO) {      /* close to perpendicular. */
+				uxx = sintheta * cospsi;
+				uyy = sintheta * sinpsi;
+				uzz = costheta * SIGN(uz);   /* SIGN() is faster than division. */
+			} 
+			else {					/* usually use this option */
+				temp = sqrt(1.0 - uz * uz);
+				uxx = sintheta * (ux * uz * cospsi - uy * sinpsi) / temp + ux * costheta;
+				uyy = sintheta * (uy * uz * cospsi + ux * sinpsi) / temp + uy * costheta;
+				uzz = -sintheta * cospsi * temp + uz * costheta;
+			}
+			
+			/* Update trajectory */
+			ux = uxx;
+			uy = uyy;
+			uz = uzz;
+			
+			/**** CHECK ROULETTE 
+			 If photon weight below THRESHOLD, then terminate photon using Roulette technique.
+			 Photon has CHANCE probability of having its weight increased by factor of 1/CHANCE,
+			 and 1-CHANCE probability of terminating.
+			 *****/
+			if (W < THRESHOLD) {
+				if (RandomNum <= CHANCE)
+					W /= CHANCE;
+				else photon_status = DEAD;
+			}				
+		
+		} while (photon_status == ALIVE);  /* end STEP_CHECK_HOP_SPIN */
+		/* if ALIVE, continue propagating */
+		/* If photon DEAD, record the number of steps it took and then launch new photon. */	
+		fprintf(fid2, "%ld \t%d %f\n",i_photon,CNT, MAXZ);
+		fprintf(fid3, "%f %f %f %d\n",x,y,z,colorPH4);
+		fprintf(fid4, "%f %f %f %d\n",x,y,z,colorPH7);
+		fprintf(fid5, "%f %f %f %d\n",x,y,z,colorPH10);
+		if (CNT > max_steps) max_steps = CNT;
+        
+	} while (i_photon < Nphotons);  /* end RUN */
+	
+    
+	printf("------------------------------------------------------\n");
+	finish_time = clock();
+	time_min = (double)(finish_time-start_time)/CLOCKS_PER_SEC/60;
+	printf("Elapsed Time for %0.3e photons = %5.3f min\n",Nphotons,time_min);
+	printf("%0.2e photons per minute\n", Nphotons/time_min);
+	
+	/**** SAVE
+	Convert data to relative fluence rate [cm^-2] and save.
+	*****/
+
+	// Normalize deposition (A) to yield fluence rate (F).
+	temp = dx*dy*dz*Nphotons;
+	for (i=0; i<NN;i++){ // kdk what is NN? what is v[i]?
+		F[i] /= (temp*muav[wl][v[i]]); // 1/29/23 kdk TO DO add dimension
+	}
+	// Save the binary file
+	strcpy(filename,myname);
+	strcat(filename,"_F.bin");
+	printf("saving %s\n",filename);
+	fid = fopen(filename, "wb");   /* 3D voxel output */
+	fwrite(F, sizeof(float), NN, fid);
+	fclose(fid);
+
+	/* save reflectance */
+// NOT READY: 
+//strcpy(filename,myname);
+//strcat(filename,"_Ryx.bin");
+//printf("saving %s\n",filename);
+//fid = fopen(filename, "wb");   /* 2D voxel output */
+//	int Nyx = Ny*Nx;
+//fwrite(R, sizeof(float), Nyx, fid);
+//fclose(fid);
+//printf("%s is done.\n",myname);
+	
+	printf("There were %d inelastic scattering events\n", n_inelastic);
+	printf("The new wavelengths matched the array of pH4 targets %d %d %d %d %d\n", 
+	    n_targetsPH4[0], n_targetsPH4[1], n_targetsPH4[2], n_targetsPH4[3], n_targetsPH4[4]);
+	printf("The new wavelengths matched the array of pH7 targets %d %d %d %d %d\n", 
+	    n_targetsPH7[0], n_targetsPH7[1], n_targetsPH7[2], n_targetsPH7[3], n_targetsPH7[4]);
+	printf("The new wavelengths matched the array of pH10 targets %d %d %d %d %d\n", 
+	    n_targetsPH7[0], n_targetsPH10[1], n_targetsPH10[2], n_targetsPH10[3], n_targetsPH10[4]);
+	printf("The max number of steps taken by a photon was %d\n", max_steps);
+	printf("While only one Raman event was ALLOWED per photon. %d photons met crit for 2 inelastic events\n", 
+	    n_dblScatteringCandidates);
+	printf("The total number of scattering events: %ld\n", n_scattering_events);
+	printf("------------------------------------------------------\n");
+	now = time(NULL);
+	printf("%s\n", ctime(&now));
+    
+	fclose(fid2);
+	fclose(fid3);
+    fclose(fid4);
+	fclose(fid5);
+	
+	free(v);
+ 	free(F);
+	free(R);
+	return 0;
+} /* end of main */
+
+
+
+/* SUBROUTINES */
+
+/**************************************************************************
+ *	RandomGen
+ *      A random number generator that generates uniformly
+ *      distributed random numbers between 0 and 1 inclusive.
+ *      The algorithm is based on:
+ *      W.H. Press, S.A. Teukolsky, W.T. Vetterling, and B.P.
+ *      Flannery, "Numerical Recipes in C," Cambridge University
+ *      Press, 2nd edition, (1992).
+ *      and
+ *      D.E. Knuth, "Seminumerical Algorithms," 2nd edition, vol. 2
+ *      of "The Art of Computer Programming", Addison-Wesley, (1981).
+ *
+ *      When Type is 0, sets Seed as the seed. Make sure 0<Seed<32000.
+ *      When Type is 1, returns a random number.
+ *      When Type is 2, gets the status of the generator.
+ *      When Type is 3, restores the status of the generator.
+ *
+ *      The status of the generator is represented by Status[0..56].
+ *
+ *      Make sure you initialize the seed before you get random
+ *      numbers.
+ ****/
+#define MBIG 1000000000
+#define MSEED 161803398
+#define MZ 0
+#define FAC 1.0E-9
+
+double RandomGen(char Type, long Seed, long *Status){
+	static long i1, i2, ma[56];   /* ma[0] is not used. */
+	long        mj, mk;
+	short       i, ii;
+
+	if (Type == 0) {              /* set seed. */
+		mj = MSEED - (Seed < 0 ? -Seed : Seed);
+		mj %= MBIG;
+		ma[55] = mj;
+		mk = 1;
+		for (i = 1; i <= 54; i++) {
+			ii = (21 * i) % 55;
+			ma[ii] = mk;
+			mk = mj - mk;
+			if (mk < MZ)
+			mk += MBIG;
+			mj = ma[ii];
+        	}
+		for (ii = 1; ii <= 4; ii++)
+			for (i = 1; i <= 55; i++) {
+				ma[i] -= ma[1 + (i + 30) % 55];
+				if (ma[i] < MZ)
+					ma[i] += MBIG;
+            		}
+		i1 = 0;
+		i2 = 31;
+	} else if (Type == 1) {       /* get a number. */
+		if (++i1 == 56)
+			i1 = 1;
+		if (++i2 == 56)
+			i2 = 1;
+		mj = ma[i1] - ma[i2];
+		if (mj < MZ)
+			mj += MBIG;
+		ma[i1] = mj;
+		return (mj * FAC);
+	} else if (Type == 2) {       /* get status. */
+		for (i = 0; i < 55; i++)
+			Status[i] = ma[i + 1];
+			Status[55] = i1;
+			Status[56] = i2;
+	} else if (Type == 3) {       /* restore status. */
+		for (i = 0; i < 55; i++)
+			ma[i + 1] = Status[i];
+		i1 = Status[55];
+		i2 = Status[56];
+	} else
+		puts("Wrong parameter to RandomGen().");
+	return (0);
+}
+#undef MBIG
+#undef MSEED
+#undef MZ
+#undef FAC
+
+
+/***********************************************************
+ *  Determine if the two position are located in the same voxel
+ *	Returns 1 if same voxel, 0 if not same voxel.
+ ****/				
+Boolean SameVoxel(double x1,double y1,double z1, double x2, double y2, double z2, double dx,double dy,double dz)
+{
+	double xmin=min2((floor)(x1/dx),(floor)(x2/dx))*dx;
+	double ymin=min2((floor)(y1/dy),(floor)(y2/dy))*dy;
+	double zmin=min2((floor)(z1/dz),(floor)(z2/dz))*dz;
+	double xmax = xmin+dx;
+	double ymax = ymin+dy;
+	double zmax = zmin+dz;
+	Boolean sv=0;
+
+	sv=(x1<=xmax && x2<=xmax && y1<=ymax && y2<=ymax && z1<zmax && z2<=zmax);
+	return (sv);
+}
+
+/***********************************************************
+ * max2
+ ****/
+double max2(double a, double b) {
+	double m;
+	if (a > b)
+        	m = a;
+	else
+		m = b;
+	return m;
+}
+
+/***********************************************************
+ * min2
+ ****/
+double min2(double a, double b) {
+	double m;
+	if (a >= b)
+		m = b;
+	else
+		m = a;
+	return m;
+}
+/***********************************************************
+ * min3
+ ****/
+double min3(double a, double b, double c) {
+	double m;
+	if (a <=  min2(b, c))
+		m = a;
+	else if (b <= min2(a, c))
+		m = b;
+	else
+		m = c;
+	return m;
+}
+
+/********************
+ * my version of FindVoxelFace for no scattering.
+ * s = ls + FindVoxelFace2(x,y,z, tempx, tempy, tempz, dx, dy, dz, ux, uy, uz);
+ ****/
+double FindVoxelFace2(double x1,double y1,double z1, double x2, double y2, double z2,double dx,double dy,double dz, double ux, double uy, double uz)
+{	
+	int ix1 = floor(x1/dx);
+	int iy1 = floor(y1/dy);
+	int iz1 = floor(z1/dz);
+
+	int ix2,iy2,iz2;
+	if (ux>=0)
+		ix2=ix1+1;
+	else
+		ix2 = ix1;
+
+	if (uy>=0)
+		iy2=iy1+1;
+	else
+		iy2 = iy1;
+
+	if (uz>=0)
+		iz2=iz1+1;
+	else
+		iz2 = iz1;
+    
+	double xs = fabs( (ix2*dx - x1)/ux);
+	double ys = fabs( (iy2*dy - y1)/uy);
+	double zs = fabs( (iz2*dz - z1)/uz);
+
+	double s = min3(xs,ys,zs);
+
+	return (s);
+}
+
+
+/***********************************************************
+ *	FRESNEL REFLECTANCE
+ * Computes reflectance as photon passes from medium 1 to 
+ * medium 2 with refractive indices n1,n2. Incident
+ * angle a1 is specified by cosine value ca1 = cos(a1).
+ * Program returns value of transmitted angle a1 as
+ * value in *ca2_Ptr = cos(a2).
+ ****/
+double RFresnel(double n1,		/* incident refractive index.*/
+                double n2,		/* transmit refractive index.*/
+                double ca1,		/* cosine of the incident */
+                /* angle a1, 0<a1<90 degrees. */
+                double *ca2_Ptr) 	/* pointer to the cosine */
+/* of the transmission */
+/* angle a2, a2>0. */
+{
+	double r;
+
+	if(n1==n2) { /** matched boundary. **/
+		*ca2_Ptr = ca1;
+		r = 0.0;
+	}
+	else if(ca1>(1.0 - 1.0e-12)) { /** normal incidence. **/
+		*ca2_Ptr = ca1;
+		r = (n2-n1)/(n2+n1);
+		r *= r;
+	}
+	else if(ca1< 1.0e-6)  {	/** very slanted. **/
+		*ca2_Ptr = 0.0;
+		r = 1.0;
+	}
+	else  {			  		/** general. **/
+		double sa1, sa2; /* sine of incident and transmission angles. */
+		double ca2;      /* cosine of transmission angle. */
+		sa1 = sqrt(1-ca1*ca1);
+		sa2 = n1*sa1/n2;
+		if(sa2>=1.0) {	
+			/* double check for total internal reflection. */
+			*ca2_Ptr = 0.0;
+			r = 1.0;
+		}
+		else {
+			double cap, cam;	/* cosines of sum ap or diff am of the two */
+			/* angles: ap = a1 + a2, am = a1 - a2. */
+			double sap, sam;	/* sines. */
+			*ca2_Ptr = ca2 = sqrt(1-sa2*sa2);
+			cap = ca1*ca2 - sa1*sa2; /* c+ = cc - ss. */
+			cam = ca1*ca2 + sa1*sa2; /* c- = cc + ss. */
+			sap = sa1*ca2 + ca1*sa2; /* s+ = sc + cs. */
+			sam = sa1*ca2 - ca1*sa2; /* s- = sc - cs. */
+			r = 0.5*sam*sam*(cam*cam+cap*cap)/(sap*sap*cam*cam); 
+			/* rearranged for speed. */
+		}
+	}
+	return(r);
+} /******** END SUBROUTINE **********/
+
+
+
+/***********************************************************
+ * the boundary is the face of some voxel
+ * find the the photon's hitting position on the nearest face of the voxel and update the step size.
+ ****/
+double FindVoxelFace(double x1,double y1,double z1, double x2, double y2, double z2,double dx,double dy,double dz, double ux, double uy, double uz)
+{
+	double x_1 = x1/dx;
+	double y_1 = y1/dy;
+	double z_1 = z1/dz;
+	double x_2 = x2/dx;
+	double y_2 = y2/dy;
+	double z_2 = z2/dz;
+	double fx_1 = floor(x_1) ;
+	double fy_1 = floor(y_1) ;
+	double fz_1 = floor(z_1) ;
+	double fx_2 = floor(x_2) ;
+	double fy_2 = floor(y_2) ;
+	double fz_2 = floor(z_2) ;
+	double x=0, y=0, z=0, x0=0, y0=0, z0=0, s=0;
+    
+	if ((fx_1 != fx_2) && (fy_1 != fy_2) && (fz_1 != fz_2) ) { //#10
+		fx_2=fx_1+SIGN(fx_2-fx_1);//added
+		fy_2=fy_1+SIGN(fy_2-fy_1);//added
+		fz_2=fz_1+SIGN(fz_2-fz_1);//added
+
+		x = (max2(fx_1,fx_2)-x_1)/ux;
+		y = (max2(fy_1,fy_2)-y_1)/uy;
+		z = (max2(fz_1,fz_2)-z_1)/uz;
+		if (x == min3(x,y,z)) {
+			x0 = max2(fx_1,fx_2);
+			y0 = (x0-x_1)/ux*uy+y_1;
+			z0 = (x0-x_1)/ux*uz+z_1;
+		}
+		else if (y == min3(x,y,z)) {
+			y0 = max2(fy_1,fy_2);
+			x0 = (y0-y_1)/uy*ux+x_1;
+			z0 = (y0-y_1)/uy*uz+z_1;
+		}
+		else {
+			z0 = max2(fz_1,fz_2);
+			y0 = (z0-z_1)/uz*uy+y_1;
+			x0 = (z0-z_1)/uz*ux+x_1;
+		}
+	}
+	else if ( (fx_1 != fx_2) && (fy_1 != fy_2) ) { //#2
+		fx_2=fx_1+SIGN(fx_2-fx_1);//added
+ 		fy_2=fy_1+SIGN(fy_2-fy_1);//added
+		x = (max2(fx_1,fx_2)-x_1)/ux;
+		y = (max2(fy_1,fy_2)-y_1)/uy;
+		if (x == min2(x,y)) {
+			x0 = max2(fx_1,fx_2);
+			y0 = (x0-x_1)/ux*uy+y_1;
+			z0 = (x0-x_1)/ux*uz+z_1;
+		}
+		else {
+			y0 = max2(fy_1, fy_2);
+			x0 = (y0-y_1)/uy*ux+x_1;
+			z0 = (y0-y_1)/uy*uz+z_1;
+		}
+	}
+	else if ( (fy_1 != fy_2) &&(fz_1 != fz_2) ) { //#3
+		fy_2=fy_1+SIGN(fy_2-fy_1);//added
+		fz_2=fz_1+SIGN(fz_2-fz_1);//added
+		y = (max2(fy_1,fy_2)-y_1)/uy;
+		z = (max2(fz_1,fz_2)-z_1)/uz;
+		if (y == min2(y,z)) {
+			y0 = max2(fy_1,fy_2);
+			x0 = (y0-y_1)/uy*ux+x_1;
+			z0 = (y0-y_1)/uy*uz+z_1;
+		}
+		else {
+			z0 = max2(fz_1, fz_2);
+			x0 = (z0-z_1)/uz*ux+x_1;
+			y0 = (z0-z_1)/uz*uy+y_1;
+		}
+	}
+	else if ( (fx_1 != fx_2) && (fz_1 != fz_2) ) { //#4
+		fx_2=fx_1+SIGN(fx_2-fx_1);//added
+		fz_2=fz_1+SIGN(fz_2-fz_1);//added
+		x = (max2(fx_1,fx_2)-x_1)/ux;
+		z = (max2(fz_1,fz_2)-z_1)/uz;
+		if (x == min2(x,z)) {
+			x0 = max2(fx_1,fx_2);
+			y0 = (x0-x_1)/ux*uy+y_1;
+			z0 = (x0-x_1)/ux*uz+z_1;
+		}
+		else {
+			z0 = max2(fz_1, fz_2);
+			x0 = (z0-z_1)/uz*ux+x_1;
+			y0 = (z0-z_1)/uz*uy+y_1;
+		}
+	}
+	else if (fx_1 != fx_2) { //#5
+		fx_2=fx_1+SIGN(fx_2-fx_1);//added
+		x0 = max2(fx_1,fx_2);
+		y0 = (x0-x_1)/ux*uy+y_1;
+		z0 = (x0-x_1)/ux*uz+z_1;
+	}
+	else if (fy_1 != fy_2) { //#6
+		fy_2=fy_1+SIGN(fy_2-fy_1);//added
+		y0 = max2(fy_1, fy_2);
+		x0 = (y0-y_1)/uy*ux+x_1;
+		z0 = (y0-y_1)/uy*uz+z_1;
+	}
+	else { //#7 
+		z0 = max2(fz_1, fz_2);
+		fz_2=fz_1+SIGN(fz_2-fz_1);//added
+		x0 = (z0-z_1)/uz*ux+x_1;
+		y0 = (z0-z_1)/uz*uy+y_1;
+	}
+	//s = ( (x0-fx_1)*dx + (y0-fy_1)*dy + (z0-fz_1)*dz )/3;
+	//s = sqrt( SQR((x0-x_1)*dx) + SQR((y0-y_1)*dy) + SQR((z0-z_1)*dz) );
+	//s = sqrt(SQR(x0-x_1)*SQR(dx) + SQR(y0-y_1)*SQR(dy) + SQR(z0-z_1)*SQR(dz));
+	s = sqrt( SQR((x0-x_1)*dx) + SQR((y0-y_1)*dy) + SQR((z0-z_1)*dz));
+	return (s);
+}
