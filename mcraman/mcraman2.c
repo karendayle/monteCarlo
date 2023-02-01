@@ -58,6 +58,7 @@
 /* Raman parameters */
 #define P_RAMAN		(0.01) // kdk artificially high, but necessary to make model work. Normalize later.
 #define N_TARGETS   (5)
+#define N_WAVELENGTHS (5)
 #define SERS        (10)
 
 /* DECLARE FUNCTIONS */
@@ -140,10 +141,10 @@ int main(int argc, const char * argv[]) {
 	char	tissuename[50][32];
     int Nw;
     int wl;
-    int nm[N_TARGETS] = {0, 0, 0, 0, 0};
-	float 	muav[N_TARGETS][Ntiss];            // muav[0:Nw-1][0:Ntiss-1], absorption coefficient of ith tissue type, 1/29/23 kdk: for each of the wavelengths
-	float 	musv[N_TARGETS][Ntiss];            // scattering coeff. 
-	float 	gv[N_TARGETS][Ntiss];              // anisotropy of scattering
+    int nm[N_WAVELENGTHS] = {0, 0, 0, 0, 0};
+	float 	muav[N_WAVELENGTHS][Ntiss];            // muav[0:Nw-1][0:Ntiss-1], absorption coefficient of ith tissue type, 1/29/23 kdk: for each of the wavelengths
+	float 	musv[N_WAVELENGTHS][Ntiss];            // scattering coeff. 
+	float 	gv[N_WAVELENGTHS][Ntiss];              // anisotropy of scattering
 
 	/* Raman parameters */
 	int	n_targetsPH4[N_TARGETS] = {0, 0, 0, 0, 0};
@@ -163,12 +164,14 @@ int main(int argc, const char * argv[]) {
 	int n_dblScatteringCandidates = 0;
 	int colorPH4, colorPH7, colorPH10; // keeps track of wavelength of photon. initially it's 0, then 1-5 if inelastically scattered
     long n_scattering_events = 0;
-
+    int debug_count1 = 0;
+    int debug_count2 = 0;
+   
 	
 	/* Input/Output */
 	char   	myname[STRLEN];	    // Holds the user's choice of myname, used in input and output files. 
 	char	filename[STRLEN];   // filename where tissue parameters are
-	FILE*	fid=NULL;           // file ID pointer 
+	FILE*	fid1=NULL;           // file ID pointer 
 	char	filename2[STRLEN];  // filename for writing debug output, incl #steps taken by each photon.
 	FILE*	fid2=NULL;          // file ID pointer 
 	char    buf[32];            // buffer for reading header.dat
@@ -178,6 +181,13 @@ int main(int argc, const char * argv[]) {
 	FILE*	fid4=NULL;          // file ID pointer
 	char	filename5[STRLEN];  // filename for writing final position of each photon.
 	FILE*	fid5=NULL;          // file ID pointer
+    FILE*	fid6=NULL;          // file ID pointer
+    FILE*	fid7=NULL;          // file ID pointer
+    FILE*	fid8=NULL;          // file ID pointer   
+    FILE*	fid9=NULL;          // file ID pointer
+    FILE*	fid10=NULL;          // file ID pointer  
+    char	filename6[STRLEN];  // filename for writing
+    char	filename7[STRLEN];  // filename for writing
 	
 	strcpy(myname, argv[1]);    // acquire name from argument of function call by user.
 	printf("name = %s\n",myname);
@@ -186,42 +196,56 @@ int main(int argc, const char * argv[]) {
 	/* IMPORT myname_H.mci */
 	strcpy(filename,myname);
 	strcat(filename, "_H.mci");
-	fid = fopen(filename,"r");
-	fgets(buf, 32, fid);
+	fid1 = fopen(filename,"r");
+	fgets(buf, 32, fid1);
 	
 	/**** OUTPUT FILES *****/
-	// number of steps by photon
+	// kdk: number of steps by photon
 	strcpy(filename2,myname);
 	strcat(filename2, "_STEPS.txt");
 	fid2 = fopen(filename2,"w");
 	//fprintf(fid2, "photon#, steps\n");
 	
-	// final position data for pH4
+	// kdk: final position data for pH4
     strcpy(filename3,myname);
 	strcat(filename3, "-ENDPOS-PH4.txt");
 	fid3 = fopen(filename3,"w");
 	//fprintf(fid3, "Final x y z of each photon\n");
 	
-	// final position data for pH7
+	// kdk: final position data for pH7
     strcpy(filename4,myname);
 	strcat(filename4, "-ENDPOS-PH7.txt");
 	fid4 = fopen(filename4,"w");
 	//fprintf(fid3, "Final x y z of each photon\n");
 	
-	// final position data for pH10
+	// kdk: final position data for pH10
     strcpy(filename5,myname);
 	strcat(filename5, "-ENDPOS-PH10.txt");
 	fid5 = fopen(filename5,"w");
 	//fprintf(fid3, "Final x y z of each photon\n");
-	
+    
+	strcpy(filename6,myname);
+	strcat(filename6,"_inelastic.txt");
+    fid9 = fopen(filename6, "w");
+    fprintf(fid9,"sample of inelastic events\n");
+    fprintf(fid9,"columns are debug_count1 rnd target_bin_pH4_values[i] wl type mua mus g\n");
+    
+    strcpy(filename7,myname);
+	strcat(filename7,"_voxelChanges.txt");
+    fid10 = fopen(filename7, "w");
+    fprintf(fid10,"sample of voxel changes\n");
+    fprintf(fid10,"columns are debug_count2 wl type mua mus g\n");
+    
+    
+    /**** Parse input ****/
     // 1/30/23 kdk: merge prints of var into just after their scan
 	// run parameters
 	sscanf(buf, "%f", &time_min); // desired time duration of run [min]
-	fgets(buf, 32, fid);
+	fgets(buf, 32, fid1);
 	sscanf(buf, "%d", &Nx);  // # of bins  
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%d", &Ny);  // # of bins
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%d", &Nz);  // # of bins   
     
 	printf("time_min = %0.2f min\n",time_min);
@@ -229,19 +253,19 @@ int main(int argc, const char * argv[]) {
 	printf("Ny = %d, dy = %0.4f [cm]\n",Ny,dy);
 	printf("Nz = %d, dz = %0.4f [cm]\n",Nz,dz);
     
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &dx);	 // size of bins [cm]
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &dy);	 // size of bins [cm] 
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &dz);	 // size of bins [cm] 
 
 	// launch parameters
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%d", &mcflag);  // mcflag, 0 = uniform, 1 = Gaussian, 2 = iso-pt
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%d", &launchflag);  // launchflag, 0 = ignore, 1 = manually set
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%d", &boundaryflag);  // 0 = no boundaries, 1 = escape at all boundaries, 2 = escape at surface only
 	
     printf("mcflag = %d\n",mcflag);
@@ -249,41 +273,39 @@ int main(int argc, const char * argv[]) {
 	if (mcflag==1) printf("launching Gaussian beam\n");
 	if (mcflag==2) printf("launching isotropic point source\n");
 	if (mcflag==3) printf("launching square source\n");
-
-
     
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &xs);  // initial launch point
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &ys);  // initial launch point 
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &zs);  // initial launch point
     
     printf("xs = %0.4f [cm]\n",xs);
 	printf("ys = %0.4f [cm]\n",ys);
 	printf("zs = %0.4f [cm]\n",zs);
     
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &xfocus);  // xfocus
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &yfocus);  // yfocus
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &zfocus);  // zfocus
 
 	printf("xfocus = %0.4f [cm]\n",xfocus);
 	printf("yfocus = %0.4f [cm]\n",yfocus);
 	printf("zfocus = %0.2e [cm]\n",zfocus);
 
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &ux0);  // ux trajectory
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &uy0);  // uy trajectory
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &uz0);  // uz trajectory
 
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &radius);  // radius
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%f", &waist);  // waist
     
 	if (launchflag==1) {
@@ -308,51 +330,49 @@ int main(int argc, const char * argv[]) {
 		return 0;
 	}
 	// tissue optical properties
-	fgets(buf, 32,fid);
+	fgets(buf, 32,fid1);
 	sscanf(buf, "%d", &Nt);				// # of tissue types in tissue list
     printf("# of tissues available, Nt = %d\n",Nt);
     
-    fgets(buf, 32,fid);
+    fgets(buf, 32,fid1);
 	sscanf(buf, "%d", &Nw);				// # of wavelengths (excitation, peak 1, peak 2, ...
     printf("# of wavelengths of interest, Nw = %d\n",Nw);
         
     // 1/29/23 kdk: read in the wavelengths. This c code has adopted Matlab convention that first index is 1
     // but here, for 5 wavelengths, we need to make use of 0-th index (or else increase size of array by 1)
     for (j=0; j<Nw; j++) {
-        fgets(buf, 32, fid);
+        fgets(buf, 32, fid1);
         sscanf(buf, "%d", &nm[j]);	// wavelength of interest excitation, peak 1, peak 2, ...
-    } 
-    for (j=0; j<Nw; j++) {
         printf("wavelength[%d] = %d\n", j, nm[j]);
-    }
+    } 
     
     for (j=0; j<Nw; j++) {
-	    for (i=1; i<=Nt; i++) {
-		    fgets(buf, 32, fid);
+	    for (i=1; i<=Nt; i++) { // 1/31/23 kdk: TO DO: fix, value at i=0 is not defined
+		    fgets(buf, 32, fid1);
 		    sscanf(buf, "%f", &muav[j][i]);	// absorption coeff [cm^-1]
-		    fgets(buf, 32, fid);
+		    fgets(buf, 32, fid1);
 		    sscanf(buf, "%f", &musv[j][i]);	// scattering coeff [cm^-1]
-		    fgets(buf, 32, fid);
+		    fgets(buf, 32, fid1);
 		    sscanf(buf, "%f", &gv[j][i]);	// anisotropy of scatter [dimensionless]
-            //printf("muav[%ld,%ld] = %0.4f [cm^-1]\n",j,i,muav[j][i]);
-		    //printf("musv[%ld,%ld] = %0.4f [cm^-1]\n",j,i,musv[j][i]);
-		    //printf("  gv[%ld,%ld] = %0.4f [--]\n\n",j,i,gv[j][i]);
+            printf("muav[%ld,%ld] = %0.4f [cm^-1]\n",j,i,muav[j][i]);
+		    printf("musv[%ld,%ld] = %0.4f [cm^-1]\n",j,i,musv[j][i]);
+		    printf("  gv[%ld,%ld] = %0.4f [--]\n\n",j,i,gv[j][i]);
         }
 	}    
-	fclose(fid);
+	fclose(fid1);
 
 	// SAVE optical properties, for later use by MATLAB.
 	strcpy(filename,myname);
 	strcat(filename,"_props.m");
-	fid = fopen(filename,"w");
-    for (j=1; j<=Nw; j++) {
-	    for (i=1; i<=Nt; i++) {
-		    fprintf(fid,"muav(%ld,%ld) = %0.4f;\n",j,i,muav[j][i]);
-		    fprintf(fid,"musv(%lc,%ld) = %0.4f;\n",j,i,musv[j][i]);
-		    fprintf(fid,"gv(%ld,%ld) = %0.4f;\n\n",j,i,gv[j][i]);
+	fid6 = fopen(filename,"w");
+    for (j=0; j<Nw; j++) {
+	    for (i=1; i<=Nt; i++) { // 1/31/23 kdk: TO DO: fix, value at i=0 is not defined
+		    fprintf(fid6,"muav(%ld,%ld) = %0.4f;\n",j,i,muav[j][i]);
+		    fprintf(fid6,"musv(%ld,%ld) = %0.4f;\n",j,i,musv[j][i]);
+		    fprintf(fid6,"gv(%ld,%ld) = %0.4f;\n\n",j,i,gv[j][i]);
         }
 	}
-	fclose(fid);
+	fclose(fid6);
     
 	/* IMPORT BINARY TISSUE FILE */
 	char 	*v=NULL;
@@ -367,9 +387,9 @@ int main(int argc, const char * argv[]) {
 	// read binary file
 	strcpy(filename,myname);
 	strcat(filename, "_T.bin");
-	fid = fopen(filename, "rb");
-	fread(v, sizeof(char), NN, fid);
-	fclose(fid);
+	fid7 = fopen(filename, "rb");
+	fread(v, sizeof(char), NN, fid7);
+	fclose(fid7);
     
 	// Show tissue on screen, along central z-axis, by listing tissue type #'s.
 	iy = Ny/2;
@@ -523,7 +543,7 @@ int main(int argc, const char * argv[]) {
 		/* Get the tissue type of located voxel */
 		i	= (long)(iz*Ny*Nx + ix*Ny + iy);
 		type	= v[i];
-        wl = 1; // 1/29/23 kdk start with excitation wavelength
+        wl = 0; // 1/29/23 kdk start with excitation wavelength
 		mua 	= muav[wl][type];
 		mus 	= musv[wl][type];
 		g 	= gv[wl][type];
@@ -591,20 +611,20 @@ int main(int argc, const char * argv[]) {
 								area under the entire spectrum.
 								Roughly, for 4,MBA, if the total area under the curve is 14, then the
 								probabilities tare:
-								Wavelength Wavenumber pH4      Bin         pH7      Bin         pH10      Bin
-								(nm)       (cm^-1)    Prob'ty  range       Prob'ty  range       Prob'ty   range
-								=================================================================================
-                                1          excitation
-								2          1072	      5/14     0.000-0.357 5/14     0.000-0.357 5/14      0.000-0.357
-								3          1430	      3/28     0.357-0.411 5/56     0.357-0.446 3/28      0.357-0.464
-								4          1582	      6/14     0.411-0.839 6/14     0.446-0.875 6/14      0.464-0.893
-								5          1702	      1/14     0.839-0.911 1/28     0.875-0.911 1/56      0.893-0.911
-								N/A        other      5/56     0.911-1.000 5/56     0.911-1.000 5/56      0.911-1.000
+								Target Wavelength Wavenumber pH4     Bin         pH7      Bin         pH10    Bin
+								#      (nm)       (cm^-1)    Prob'ty range       Prob'ty  range       Prob'ty range
+								=======================================================================================
+                                N/A    0          excitation  N/A    N/A         N/A      N/A         N/A
+								0      1          1072	      5/14   0.000-0.357 5/14     0.000-0.357 5/14    0.000-0.357
+								1      2          1430	      3/28   0.357-0.411 5/56     0.357-0.446 3/28    0.357-0.464
+								2      3          1582	      6/14   0.411-0.839 6/14     0.446-0.875 6/14    0.464-0.893
+								3      4          1702	      1/14   0.839-0.911 1/28     0.875-0.911 1/56    0.893-0.911
+								4      N/A        other       5/56   0.911-1.000 5/56     0.911-1.000 5/56    0.911-1.000
 							*/
 
 							rnd = RandomNum;
 							int foundPH4 = 0;  
-							i = 0;
+							i = 0; // 1/31/23 start out looking for the 0-th target (see table above)
 							while (!foundPH4 && i < N_TARGETS) {
 								if (rnd < target_bin_pH4_values[i]) { 
 									//printf("%f matches %d\n", rnd, i);
@@ -612,10 +632,22 @@ int main(int argc, const char * argv[]) {
 									foundPH4 = 1;
 									colorPH4 = i+1;
                                     wl = i+1; // 1/29/23 kdk update wavelength to match new wavelength
+                                    
+                                    // 2/1/23 kdk: write details of scatter to file: debug_count,rnd,n_targetsPH4,wl,type,old musv,new musv           
+                                    if (debug_count1 < 10000) {
+                                        fprintf(fid9,"inelastic at pH4 %d %f %f %d %d %f %f\n", debug_count1, rnd, target_bin_pH4_values[i], wl, type, mus, musv[wl][type]);
+                                    }
+                                    
                                     mua 	= muav[wl][type]; // 1/29/23 kdk update scattering parameters to match new wavelength
                                     mus 	= musv[wl][type];
                                     g 	    = gv[wl][type];
-                                    // 1/29/23 kdk: save previous parameters to orig in order to do comparison modeling.
+                                    
+                                    // 1/29/23 kdk: TO DO save previous parameters to orig in order to do comparison modeling.
+                                                                        // 1/31/23 kdk: TO DO don't I need to continue out of this loop once a less than is found? 
+                                    //              No, "found" takes care of this.
+                                    // Actually this is hard since photon could leave voxel on diff iter given other params. 
+                                    // It would be better to add a new photon at this step and mark it as "orig" or sth and
+                                    // let it run its course.
 								}
 								i++;
 							}
@@ -628,10 +660,21 @@ int main(int argc, const char * argv[]) {
 									foundPH7 = 1;
 									colorPH7 = i+1;
                                     wl = i+1; // 1/29/23 kdk update wavelength to match new wavelength
+                                    
+                                    // 2/1/23 kdk: write details of scatter to file: debug_count,rnd,n_targetsPH7,wl,type,old musv,new musv
+                                    //if (debug_count1 < 10000) {
+                                    //    fprintf(fid9,"inelastic at pH7 %d %f %f %d %d %f %f\n", debug_count1, rnd, target_bin_pH7_values[i], wl, type, mus, musv[wl][type]);
+                                    //}
+                                    
                                     mua 	= muav[wl][type]; // 1/29/23 kdk update scattering parameters to match new wavelength
                                     mus 	= musv[wl][type];
                                     g 	    = gv[wl][type];
-                                    // 1/29/23 kdk: save previous parameters to orig in order to do comparison modeling.
+                                    // 1/29/23 kdk: TO DO save previous parameters to orig in order to do comparison modeling.
+                                    // 1/31/23 kdk: TO DO don't I need to continue out of this loop once a less than is found?
+                                    //              No, "found" takes care of this.
+                                    // Actually this is hard since photon could leave voxel on diff iter given other params. 
+                                    // It would be better to add a new photon at this step and mark it as "orig" or sth and
+                                    // let it run its course.
 								}
 								i++;
 							}
@@ -643,11 +686,19 @@ int main(int argc, const char * argv[]) {
 									n_targetsPH10[i] = n_targetsPH10[i] + 1; // keep track of matches to all 5 targets
 									foundPH10 = 1;
 									colorPH10 = i+1;
+                                    
+                                    // 2/1/23 kdk: write details of scatter to file: debug_count,rnd,n_targetsPH10,wl,type,old musv,new musv                             
+                                    //if (debug_count1 < 10000) {
+                                    //    fprintf(fid9,"inelastic at pH10 %d %f %f %d %d %f %f\n", debug_count1, rnd, target_bin_pH10_values[i], wl, type, mus, musv[wl][type]);
+                                    //}
+                                    
                                     wl = i+1; // 1/29/23 kdk update wavelength to match new wavelength
                                     mua 	= muav[wl][type]; // 1/29/23 kdk update scattering parameters to match new wavelength
                                     mus 	= musv[wl][type];
                                     g 	    = gv[wl][type];
-                                    // 1/29/23 kdk: save previous parameters to orig in order to do comparison modeling. 
+                                    // 1/29/23 kdk: TO DO save previous parameters to orig in order to do comparison modeling.
+                                    // 1/31/23 kdk: TO DO don't I need to continue out of this loop once a less than is found?
+                                    //              No, "found" takes care of this.
                                     // Actually this is hard since photon could leave voxel on diff iter given other params. 
                                     // It would be better to add a new photon at this step and mark it as "orig" or sth and
                                     // let it run its course. 
@@ -710,7 +761,7 @@ int main(int argc, const char * argv[]) {
 			
 					bflag = 1;  // Boundary flag. Initialize as 1 = inside volume, then check.
 					if (boundaryflag==0) { // Infinite medium.
-								// Check if photon has wandered outside volume.
+					    // Check if photon has wandered outside volume.
 						// If so, set tissue type to boundary value, but let photon wander.
 						// Set blag to zero, so DROP does not deposit energy.
 						if (iz>=Nz) {iz=Nz-1; bflag = 0;}
@@ -743,6 +794,13 @@ int main(int argc, const char * argv[]) {
 					mua  = muav[wl][type]; // 1/29/23 kdk: TO DO add dimension
 					mus  = musv[wl][type]; // 1/29/23 kdk: TO DO add dimension
 					g    = gv[wl][type]; // 1/29/23 kdk: TO DO add dimension
+                    // 1/31/23 kdk: TO DO write details of this change to file: i, type, wl, rnd, muav, musv, gv
+                    
+                    if (debug_count1 < 10000) {
+                        fprintf(fid9,"changed voxel %d %d %d %f\n", debug_count1, wl, type, mus);
+                        debug_count1++;
+                    }
+                    
 			
 				} //(sv) /* same voxel */
 		
@@ -832,10 +890,10 @@ int main(int argc, const char * argv[]) {
 	strcpy(filename,myname);
 	strcat(filename,"_F.bin");
 	printf("saving %s\n",filename);
-	fid = fopen(filename, "wb");   /* 3D voxel output */
-	fwrite(F, sizeof(float), NN, fid);
-	fclose(fid);
-
+	fid8 = fopen(filename, "wb");   /* 3D voxel output */
+	fwrite(F, sizeof(float), NN, fid8);
+	fclose(fid8);
+    
 	/* save reflectance */
 // NOT READY: 
 //strcpy(filename,myname);
@@ -855,7 +913,7 @@ int main(int argc, const char * argv[]) {
 	printf("The new wavelengths matched the array of pH10 targets %d %d %d %d %d\n", 
 	    n_targetsPH7[0], n_targetsPH10[1], n_targetsPH10[2], n_targetsPH10[3], n_targetsPH10[4]);
 	printf("The max number of steps taken by a photon was %d\n", max_steps);
-	printf("While only one Raman event was ALLOWED per photon. %d photons met crit for 2 inelastic events\n", 
+	printf("While only one Raman event was ALLOWED per photon. the criteria for an additional inelastic event was met %d times\n", 
 	    n_dblScatteringCandidates);
 	printf("The total number of scattering events: %ld\n", n_scattering_events);
 	printf("------------------------------------------------------\n");
@@ -866,6 +924,8 @@ int main(int argc, const char * argv[]) {
 	fclose(fid3);
     fclose(fid4);
 	fclose(fid5);
+    fclose(fid9);
+    fclose(fid10);
 	
 	free(v);
  	free(F);
