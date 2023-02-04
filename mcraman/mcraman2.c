@@ -228,14 +228,13 @@ int main(int argc, const char * argv[]) {
 	strcat(filename6,"_inelastic.txt");
     fid9 = fopen(filename6, "w");
     fprintf(fid9,"sample of inelastic events\n");
-    fprintf(fid9,"columns are debug_count1 rnd target_bin_pH4_values[i] wl type mua mus g\n");
+    fprintf(fid9,"columns are debug_count1 rnd target_bin_pHx_values[i] wl type oldMu_s newMu_s\n");
     
     strcpy(filename7,myname);
 	strcat(filename7,"_voxelChanges.txt");
     fid10 = fopen(filename7, "w");
     fprintf(fid10,"sample of voxel changes\n");
-    fprintf(fid10,"columns are debug_count2 wl type mua mus g\n");
-    
+    fprintf(fid10,"columns are debug_count2 wl type mu_s\n");
     
     /**** Parse input ****/
     // 1/30/23 kdk: merge prints of var into just after their scan
@@ -794,13 +793,12 @@ int main(int argc, const char * argv[]) {
 					mua  = muav[wl][type]; // 1/29/23 kdk: TO DO add dimension
 					mus  = musv[wl][type]; // 1/29/23 kdk: TO DO add dimension
 					g    = gv[wl][type]; // 1/29/23 kdk: TO DO add dimension
-                    // 1/31/23 kdk: TO DO write details of this change to file: i, type, wl, rnd, muav, musv, gv
+                    // 1/31/23 kdk: TO DO write details of this change to file: i, type, wl, rnd, mus
                     
-                    if (debug_count1 < 10000) {
-                        fprintf(fid9,"changed voxel %d %d %d %f\n", debug_count1, wl, type, mus);
-                        debug_count1++;
+                    if (debug_count2 < 10000) {
+                        fprintf(fid10,"changed voxel %d %d %d %f\n", debug_count2, wl, type, mus);
+                        debug_count2++;
                     }
-                    
 			
 				} //(sv) /* same voxel */
 		
