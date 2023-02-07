@@ -153,6 +153,7 @@ int main(int argc, const char * argv[]) {
 	int	n_inelastic = 0;
 	int	max_steps = 0;
 	int	this_photon_was_raman_scattered = 0;	
+    // 20230206 kdk: adjust these, so that there is no catchall for WLs that don't match targets
 	float target_bin_pH4_values[N_TARGETS] = {(20./56.), ((20.+3.)/56.), ((20.+3.+24.)/56.), ((20.+3.+24.+4.)/56.), 1.0}; //explained @line ~532
 	float target_bin_pH7_values[N_TARGETS] = {(20./56.), ((20.+5.)/56.), ((20.+5.+24.)/56.), ((20.+5.+24.+2.)/56.), 1.0}; 	
 	float target_bin_pH10_values[N_TARGETS] = {(20./56.), ((20.+6.)/56.), ((20.+6.+24.)/56.), ((20.+6.+24.+1.)/56.),1.0};
@@ -345,8 +346,8 @@ int main(int argc, const char * argv[]) {
         printf("wavelength[%d] = %d\n", j, nm[j]);
     } 
     
-    for (j=0; j<Nw; j++) {
-	    for (i=1; i<=Nt; i++) { // 1/31/23 kdk: TO DO: fix, value at i=0 is not defined
+    for (j=0; j<Nw; j++) { // 2/6/23 kdk: this works, but breaks Matlab later
+	    for (i=1; i<=Nt; i++) { // 1/31/23 kdk: this needs to start at one in order to be written out to Matlab
 		    fgets(buf, 32, fid1);
 		    sscanf(buf, "%f", &muav[j][i]);	// absorption coeff [cm^-1]
 		    fgets(buf, 32, fid1);
@@ -365,10 +366,10 @@ int main(int argc, const char * argv[]) {
 	strcat(filename,"_props.m");
 	fid6 = fopen(filename,"w");
     for (j=0; j<Nw; j++) {
-	    for (i=1; i<=Nt; i++) { // 1/31/23 kdk: TO DO: fix, value at i=0 is not defined
-		    fprintf(fid6,"muav(%ld,%ld) = %0.4f;\n",j,i,muav[j][i]);
-		    fprintf(fid6,"musv(%ld,%ld) = %0.4f;\n",j,i,musv[j][i]);
-		    fprintf(fid6,"gv(%ld,%ld) = %0.4f;\n\n",j,i,gv[j][i]);
+	    for (i=1; i<=Nt; i++) { // 1/31/23 kdk: fix=keep it this way and just write out j+1 in the print?
+		    fprintf(fid6,"muav(%ld,%ld) = %0.4f;\n",j+1,i,muav[j][i]);
+		    fprintf(fid6,"musv(%ld,%ld) = %0.4f;\n",j+1,i,musv[j][i]);
+		    fprintf(fid6,"gv(%ld,%ld) = %0.4f;\n\n",j+1,i,gv[j][i]);
         }
 	}
 	fclose(fid6);
@@ -636,8 +637,8 @@ int main(int argc, const char * argv[]) {
                                     if (debug_count1 < 10000) {
                                         fprintf(fid9,"inelastic at pH4 %d %f %f %d %d %f %f\n", debug_count1, rnd, target_bin_pH4_values[i], wl, type, mus, musv[wl][type]);
                                     }
-                                    
-                                    mua 	= muav[wl][type]; // 1/29/23 kdk update scattering parameters to match new wavelength
+                                    // 1/29/23 kdk update scattering parameters to match new wavelength
+                                    mua 	= muav[wl][type]; 
                                     mus 	= musv[wl][type];
                                     g 	    = gv[wl][type];
                                     
@@ -665,7 +666,8 @@ int main(int argc, const char * argv[]) {
                                     //    fprintf(fid9,"inelastic at pH7 %d %f %f %d %d %f %f\n", debug_count1, rnd, target_bin_pH7_values[i], wl, type, mus, musv[wl][type]);
                                     //}
                                     
-                                    mua 	= muav[wl][type]; // 1/29/23 kdk update scattering parameters to match new wavelength
+                                    // 1/29/23 kdk update scattering parameters to match new wavelength
+                                    mua 	= muav[wl][type]; 
                                     mus 	= musv[wl][type];
                                     g 	    = gv[wl][type];
                                     // 1/29/23 kdk: TO DO save previous parameters to orig in order to do comparison modeling.
@@ -692,7 +694,8 @@ int main(int argc, const char * argv[]) {
                                     //}
                                     
                                     wl = i+1; // 1/29/23 kdk update wavelength to match new wavelength
-                                    mua 	= muav[wl][type]; // 1/29/23 kdk update scattering parameters to match new wavelength
+                                     // 1/29/23 kdk update scattering parameters to match new wavelength
+                                    mua 	= muav[wl][type];
                                     mus 	= musv[wl][type];
                                     g 	    = gv[wl][type];
                                     // 1/29/23 kdk: TO DO save previous parameters to orig in order to do comparison modeling.
