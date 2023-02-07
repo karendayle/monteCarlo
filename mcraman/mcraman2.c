@@ -31,6 +31,7 @@
  *      Reads input files, outputs binary files.
  *  updated: 1 June, 2017 slj
  *  adapted for Raman from mcxyz.c: 17 October, 2019 dayle
+ *  updated to change optical properties after inelastic event February, 2023 dayle
  *********************************************/
 
 #include <math.h>
@@ -57,7 +58,7 @@
 /* If 1+cos(theta) <= ONE_MINUS_COSZERO, fabs(PI-theta) <= 1e-6 rad. */
 /* Raman parameters */
 #define P_RAMAN		(0.01) // kdk artificially high, but necessary to make model work. Normalize later.
-#define N_TARGETS   (5)
+#define N_TARGETS   (4) // 2/7/23 kdk: without catchall, number of targets is 4
 #define N_WAVELENGTHS (5)
 #define SERS        (10)
 
@@ -147,21 +148,23 @@ int main(int argc, const char * argv[]) {
 	float 	gv[N_WAVELENGTHS][Ntiss];              // anisotropy of scattering
 
 	/* Raman parameters */
-	int	n_targetsPH4[N_TARGETS] = {0, 0, 0, 0, 0};
-	int	n_targetsPH7[N_TARGETS] = {0, 0, 0, 0, 0};
-	int	n_targetsPH10[N_TARGETS] = {0, 0, 0, 0, 0};
+	//int	n_targetsPH4[N_TARGETS] = {0, 0, 0, 0, 0};
+	int	n_targetsPH7[N_TARGETS] = {0, 0, 0, 0}; // 2/7/23 kdk: without catchall, number of targets is 4
+	//int	n_targetsPH10[N_TARGETS] = {0, 0, 0, 0, 0};
 	int	n_inelastic = 0;
 	int	max_steps = 0;
 	int	this_photon_was_raman_scattered = 0;	
-    // 20230206 kdk: adjust these, so that there is no catchall for WLs that don't match targets
-	float target_bin_pH4_values[N_TARGETS] = {(20./56.), ((20.+3.)/56.), ((20.+3.+24.)/56.), ((20.+3.+24.+4.)/56.), 1.0}; //explained @line ~532
-	float target_bin_pH7_values[N_TARGETS] = {(20./56.), ((20.+5.)/56.), ((20.+5.+24.)/56.), ((20.+5.+24.+2.)/56.), 1.0}; 	
-	float target_bin_pH10_values[N_TARGETS] = {(20./56.), ((20.+6.)/56.), ((20.+6.+24.)/56.), ((20.+6.+24.+1.)/56.),1.0};
+    // 2/6/23 kdk: adjust these, so that there is no catchall for WLs that don't match targets
+    // 2/7/23 kdk: since we are only running the simulation for pH7 right now, leave the catchall in the pH4 and pH10 cases; it doesn't get used.
+	//float target_bin_pH4_values[N_TARGETS] = {(20./56.), ((20.+3.)/56.), ((20.+3.+24.)/56.), ((20.+3.+24.+4.)/56.), 1.0}; //explained @line ~532
+	// previous float target_bin_pH7_values[N_TARGETS] = {(20./56.), ((20.+5.)/56.), ((20.+5.+24.)/56.), ((20.+5.+24.+2.)/56.), 1.0}; 	
+    float target_bin_pH7_values[N_TARGETS] = {(21./56.), ((21.+6.)/56.), ((21.+6.+26.)/56.), ((21.+6.+26.+3.)/56.)}; 
+	//float target_bin_pH10_values[N_TARGETS] = {(20./56.), ((20.+6.)/56.), ((20.+6.+24.)/56.), ((20.+6.+24.+1.)/56.),1.0};
 	// These are the same, but seeing some round off errors so that # photons at ref peaks vary slightly across pH -- they shouldn't
 	//float target_bin_pH4_values[N_TARGETS] = {0.357, 0.411, 0.839, 0.911, 1.0}; //explained @line ~532
 	//float target_bin_pH7_values[N_TARGETS] = {0.357, 0.446, 0.875, 0.911, 1.0}; 	
 	//float target_bin_pH10_values[N_TARGETS] = {0.357, 0.464, 0.893, 0.911, 1.0};
-	int	targets[N_TARGETS] = {0, 0, 0, 0, 0};
+	int	targets[N_TARGETS] = {0, 0, 0, 0}; // 2/7/23 kdk: without catchall, number of targets is 4
 	int n_dblScatteringCandidates = 0;
 	int colorPH4, colorPH7, colorPH10; // keeps track of wavelength of photon. initially it's 0, then 1-5 if inelastically scattered
     long n_scattering_events = 0;
@@ -623,6 +626,7 @@ int main(int argc, const char * argv[]) {
 							*/
 
 							rnd = RandomNum;
+                            /*
 							int foundPH4 = 0;  
 							i = 0; // 1/31/23 start out looking for the 0-th target (see table above)
 							while (!foundPH4 && i < N_TARGETS) {
@@ -642,15 +646,22 @@ int main(int argc, const char * argv[]) {
                                     mus 	= musv[wl][type];
                                     g 	    = gv[wl][type];
                                     
-                                    // 1/29/23 kdk: TO DO save previous parameters to orig in order to do comparison modeling.
-                                                                        // 1/31/23 kdk: TO DO don't I need to continue out of this loop once a less than is found? 
-                                    //              No, "found" takes care of this.
-                                    // Actually this is hard since photon could leave voxel on diff iter given other params. 
-                                    // It would be better to add a new photon at this step and mark it as "orig" or sth and
-                                    // let it run its course.
+                                    // 1/29/23 kdk: Idea: save previous parameters to orig in order to do comparison modeling.
+                                    //              Actually this is hard since photon could leave voxel on diff iter given other params. 
+                                    //              It would be better to add a new photon at this step and mark it as "orig" or sth and
+                                    //              let it run its course.
+                                    //              Decide not to do this for now, because the two cases can't be tracked side-by-side 
+                                    //              the way the code is written. Instead, the code to propagate from this point on would 
+                                    //              need to be in a subroutine/method
+                                    //              that could be called for both the new post-inelastic scattering event and the never-scattered
+                                    //              case and then propagation path and final positions could be compared.
+                                    // 1/31/23 kdk: Note that I don't need to continue out of this loop once a less than is found
+                                    //              because "found" takes care of this.
 								}
 								i++;
 							}
+                            */
+                            
 							int foundPH7 = 0;
 							i = 0;
 							while (!foundPH7 && i < N_TARGETS) {
@@ -670,15 +681,22 @@ int main(int argc, const char * argv[]) {
                                     mua 	= muav[wl][type]; 
                                     mus 	= musv[wl][type];
                                     g 	    = gv[wl][type];
-                                    // 1/29/23 kdk: TO DO save previous parameters to orig in order to do comparison modeling.
-                                    // 1/31/23 kdk: TO DO don't I need to continue out of this loop once a less than is found?
-                                    //              No, "found" takes care of this.
-                                    // Actually this is hard since photon could leave voxel on diff iter given other params. 
-                                    // It would be better to add a new photon at this step and mark it as "orig" or sth and
-                                    // let it run its course.
+                                    // 1/29/23 kdk: Idea: save previous parameters to orig in order to do comparison modeling.
+                                    //              Actually this is hard since photon could leave voxel on diff iter given other params. 
+                                    //              It would be better to add a new photon at this step and mark it as "orig" or sth and
+                                    //              let it run its course.
+                                    //              Decide not to do this for now, because the two cases can't be tracked side-by-side 
+                                    //              the way the code is written. Instead, the code to propagate from this point on would 
+                                    //              need to be in a subroutine/method
+                                    //              that could be called for both the new post-inelastic scattering event and the never-scattered
+                                    //              case and then propagation path and final positions could be compared.
+                                    // 1/31/23 kdk: Note that I don't need to continue out of this loop once a less than is found
+                                    //              because "found" takes care of this.
 								}
 								i++;
 							}
+                            
+                            /*
 							int foundPH10 = 0;
 							i = 0;
 							while (!foundPH10 && i < N_TARGETS) {
@@ -698,15 +716,21 @@ int main(int argc, const char * argv[]) {
                                     mua 	= muav[wl][type];
                                     mus 	= musv[wl][type];
                                     g 	    = gv[wl][type];
-                                    // 1/29/23 kdk: TO DO save previous parameters to orig in order to do comparison modeling.
-                                    // 1/31/23 kdk: TO DO don't I need to continue out of this loop once a less than is found?
-                                    //              No, "found" takes care of this.
+                                    // 1/29/23 kdk: Idea: save previous parameters to orig in order to do comparison modeling.
+                                    //              Decide not to do this for now, because the two cases can't be tracked side-by-side 
+                                    //              the way the code is written. Instead, the code to propagate from this point on would 
+                                    //              need to be in a subroutine/method
+                                    //              that could be called for both the new post-inelastic scattering event and the never-scattered
+                                    //              case and then propagation path and final positions could be compared.
+                                    // 1/31/23 kdk: Note that I don't need to continue out of this loop once a less than is found
+                                    //              because "found" takes care of this.
                                     // Actually this is hard since photon could leave voxel on diff iter given other params. 
                                     // It would be better to add a new photon at this step and mark it as "orig" or sth and
                                     // let it run its course. 
 								}
 								i++;
 							}
+                            */
 
 						} // Random number indicates that Raman event has occurred
 					} // Handle possibility of inelastic scattering  
@@ -793,10 +817,10 @@ int main(int argc, const char * argv[]) {
 					// update tissue type now for next time, now that we have left the voxel
 					i    = (long)(iz*Ny*Nx + ix*Ny + iy);
 					type = v[i];
-					mua  = muav[wl][type]; // 1/29/23 kdk: TO DO add dimension
-					mus  = musv[wl][type]; // 1/29/23 kdk: TO DO add dimension
-					g    = gv[wl][type]; // 1/29/23 kdk: TO DO add dimension
-                    // 1/31/23 kdk: TO DO write details of this change to file: i, type, wl, rnd, mus
+					mua  = muav[wl][type]; // 1/29/23 kdk: added dimension
+					mus  = musv[wl][type]; // 1/29/23 kdk: added dimension
+					g    = gv[wl][type]; // 1/29/23 kdk: added dimension
+                    // 1/31/23 kdk: write details of this change to file: i, type, wl, rnd, mus
                     
                     if (debug_count2 < 10000) {
                         fprintf(fid10,"changed voxel %d %d %d %f\n", debug_count2, wl, type, mus);
@@ -885,7 +909,7 @@ int main(int argc, const char * argv[]) {
 	// Normalize deposition (A) to yield fluence rate (F).
 	temp = dx*dy*dz*Nphotons;
 	for (i=0; i<NN;i++){ // kdk what is NN? what is v[i]?
-		F[i] /= (temp*muav[wl][v[i]]); // 1/29/23 kdk TO DO add dimension
+		F[i] /= (temp*muav[wl][v[i]]); // 1/29/23 kdk added dimension
 	}
 	// Save the binary file
 	strcpy(filename,myname);
@@ -907,12 +931,12 @@ int main(int argc, const char * argv[]) {
 //printf("%s is done.\n",myname);
 	
 	printf("There were %d inelastic scattering events\n", n_inelastic);
-	printf("The new wavelengths matched the array of pH4 targets %d %d %d %d %d\n", 
-	    n_targetsPH4[0], n_targetsPH4[1], n_targetsPH4[2], n_targetsPH4[3], n_targetsPH4[4]);
+	//printf("The new wavelengths matched the array of pH4 targets %d %d %d %d %d\n", 
+	//    n_targetsPH4[0], n_targetsPH4[1], n_targetsPH4[2], n_targetsPH4[3], n_targetsPH4[4]);
 	printf("The new wavelengths matched the array of pH7 targets %d %d %d %d %d\n", 
-	    n_targetsPH7[0], n_targetsPH7[1], n_targetsPH7[2], n_targetsPH7[3], n_targetsPH7[4]);
-	printf("The new wavelengths matched the array of pH10 targets %d %d %d %d %d\n", 
-	    n_targetsPH7[0], n_targetsPH10[1], n_targetsPH10[2], n_targetsPH10[3], n_targetsPH10[4]);
+	    n_targetsPH7[0], n_targetsPH7[1], n_targetsPH7[2], n_targetsPH7[3]); // 2/7/23 kdk: without catchall, number of targets is 4
+	//printf("The new wavelengths matched the array of pH10 targets %d %d %d %d %d\n", 
+	//    n_targetsPH10[0], n_targetsPH10[1], n_targetsPH10[2], n_targetsPH10[3], n_targetsPH10[4]);
 	printf("The max number of steps taken by a photon was %d\n", max_steps);
 	printf("While only one Raman event was ALLOWED per photon. the criteria for an additional inelastic event was met %d times\n", 
 	    n_dblScatteringCandidates);
