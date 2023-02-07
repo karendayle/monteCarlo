@@ -61,6 +61,7 @@
 #define N_TARGETS   (4) // 2/7/23 kdk: without catchall, number of targets is 4
 #define N_WAVELENGTHS (5)
 #define SERS        (10)
+#define CHANGE_WAVELENGTH (1) // 2/7/23 kdk Set/unset in order to compare effect of changing wavelength
 
 /* DECLARE FUNCTIONS */
 double RandomGen(char Type, long Seed, long *Status);  
@@ -817,11 +818,17 @@ int main(int argc, const char * argv[]) {
 					// update tissue type now for next time, now that we have left the voxel
 					i    = (long)(iz*Ny*Nx + ix*Ny + iy);
 					type = v[i];
-					mua  = muav[wl][type]; // 1/29/23 kdk: added dimension
-					mus  = musv[wl][type]; // 1/29/23 kdk: added dimension
-					g    = gv[wl][type]; // 1/29/23 kdk: added dimension
+                    // Set/unset CHANGE_WAVELENGTH in order to compare effect of changing wavelength
+                    if (CHANGE_WAVELENGTH == 1) {
+                        mua  = muav[wl][type]; // 1/29/23 kdk: added dimension
+                        mus  = musv[wl][type]; // 1/29/23 kdk: added dimension
+                        g    = gv[wl][type]; // 1/29/23 kdk: added dimension
+                    } else {
+                        mua  = muav[0][type]; // 1/29/23 kdk: added dimension
+                        mus  = musv[0][type]; // 1/29/23 kdk: added dimension
+                        g    = gv[0][type]; // 1/29/23 kdk: added dimension
+                    }
                     // 1/31/23 kdk: write details of this change to file: i, type, wl, rnd, mus
-                    
                     if (debug_count2 < 10000) {
                         fprintf(fid10,"changed voxel %d %d %d %f\n", debug_count2, wl, type, mus);
                         debug_count2++;
