@@ -346,9 +346,10 @@ function c = addLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue, mcflag, ra
     N = 20; % # of beam rays drawn
     switch mcflag
         case 0 % uniform
-            for i=0:N
-                plot((-radius + 2*radius*i/N)*[1 1],[zs max(z)],'r-')
-            end
+              for i=0:N
+%                 plot((-radius + 2*radius*i/N)*[1 1],[zs max(z)],'r-')
+                  plot((-radius + 2*radius*i/N)*[1 1],[zs 0.2],'r-')
+              end
 
         case 1 % Gaussian
             for i=0:N
