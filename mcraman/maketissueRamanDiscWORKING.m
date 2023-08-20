@@ -134,7 +134,7 @@ for iz=1:Nz % for every depth z(iz)
         T(:,:,iz) = 5; 
     end
     
-    % Cylindrical SERS-active hydrogel @ xc, zc (2mm) , radius, oriented along y axis
+    % Disc SERS-active hydrogel @ xc, zc (2mm) , radius, oriented along y axis
     xc      = 0;        % [cm], center of cylindrical disc sensor
     yc      = 0;      	% [cm], center of cylindrical disc sensor 
     sensorradius  = 0.300; % [cm], cylindrical sensor radius

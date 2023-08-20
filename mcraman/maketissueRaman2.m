@@ -26,8 +26,8 @@
 %       respectively.
 %
 %  Steven L. Jacques. updated Aug 21, 2014.
-%  Dayle, adapted for Raman Feb, 2020.  
-%  Dayle, change wavelength after inelastic scattering Jan, 2023.  
+%  Dayle Kotturi, adapted for Raman Feb, 2020.  
+%  Dayle Kotturi, change wavelength after inelastic scattering Jan, 2023.  
 
 clear
 format compact
@@ -152,6 +152,8 @@ zmin = min(z);
 zmax = max(z);
 xmin = min(x);
 xmax = max(x);
+ymin = min(y);
+ymax = max(y);
 
 if isinf(zfocus), zfocus = 1e12; end
 
@@ -220,7 +222,9 @@ for iz=1:Nz % for every depth z(iz)
                     % spans half the structure, which is 1cm out of 2cm
                     % from y=-0.5 to y=+0.5 cm
                     T(iy,ix,iz) = 10; % SERS-active hydrogel tissue type
-                    %fprintf('sensor at %d,%d,%d\n', ix,iy,iz);
+                    if iz == 25
+                        fprintf('sensor at %d,%d,%d\n', ix,iy,iz);
+                    end
                 end
             end % iy
         end %ix
@@ -303,6 +307,10 @@ Tzx  = Txzy(:,:,Ny/2)'; % Tzx
 Tzyx = shiftdim(T,2); %Tyxz --> Tzyx
 Tzy = Tzyx(:,:,Nx/2); % Tzy
 
+%% Look at structure of Tyx at ix=Nx/2
+%% This shows top view of cylindrical SERS sensor
+Tyx = T(:,:,25); % Tyx
+
 %%
 figure(1); clf
 sz = 12;  fz = 10; 
@@ -315,7 +323,7 @@ title('Tissue structure: front view','FontSize',18);
 c = addLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue_excite, mcflag, radius, zs, z);
 %%
 figure(2); clf
-sz = 12;  
+sz = 18;  
 imagesc(y,z,Tzy,[1 Nt])
 hold on
 set(gca,'fontsize',sz)
@@ -323,6 +331,18 @@ xlabel('y [cm]')
 ylabel('z [cm]')
 title('Tissue structure: side view','FontSize',18);
 c = addLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue_excite, mcflag, radius, zs, z);
+%%
+figure(3); clf
+sz = 18;  
+imagesc(x,y,Tyx,[1 Nt])
+hold on
+set(gca,'fontsize',sz)
+xlabel('x [cm]')
+ylabel('y [cm]')
+title('Tissue structure: top view at depth z=0.25 cm','FontSize',18);
+c = addLegend(Nt, Ny, dy, x, xmin, xmax, ymax, ymin, tissue_excite, 4, radius, zs, z);
+
+
 
 function c = addLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue, mcflag, radius, zs, z)   
     fz = 10; 
@@ -333,9 +353,16 @@ function c = addLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue, mcflag, ra
     % label colorbar
     zdiff = zmax-zmin;
     %%%
-    for i=1:Nt
-        yy = (Nt-i)/(Nt-1)*Nz*dz;
-        text(max(x)*1.2,yy, tissue(i).name,'fontsize',fz)
+    if mcflag == 4
+        for i=1:Nt
+            yy = ((Nt-i)/(Nt-1)-0.5)*Nz*dz;
+            text(max(x)*1.2,yy, tissue(i).name,'fontsize',fz)
+        end  
+    else
+        for i=1:Nt
+            yy = (Nt-i)/(Nt-1)*Nz*dz;
+            text(max(x)*1.2,yy, tissue(i).name,'fontsize',fz)
+        end 
     end
     
     text(xmax,zmin - zdiff*0.06, 'Tissue types','fontsize',fz)
@@ -347,8 +374,39 @@ function c = addLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue, mcflag, ra
     switch mcflag
         case 0 % uniform
               for i=0:N
-%                 plot((-radius + 2*radius*i/N)*[1 1],[zs max(z)],'r-')
-                  plot((-radius + 2*radius*i/N)*[1 1],[zs 0.2],'r-')
+                  % plot((-radius + 2*radius*i/N)*[1 1],[zs max(z)],'r-')
+                  % Stop it at the sensor
+                  % plot((-radius + 2*radius*i/N)*[1 1],[zs 0.2],'r-')
+                  % Make it at 45 degrees
+                  % factor(i) = 2*radius*i/N
+                  % x = (-0.75 + factor(i))*[0.1 01];
+                  x = [-0.2 0.07];
+                  z = [-0.1 0.2];
+                  plot(x,z,'r-');
+                  x = [-0.202 0.06];
+                  z = [-0.1 0.2];
+                  plot(x,z,'r-');
+                  x = [-0.204 0.05];
+                  z = [-0.1 0.2];
+                  plot(x,z,'r-');
+                  x = [-0.206 0.04];
+                  z = [-0.1 0.2];
+                  plot(x,z,'r-');
+                  x = [-0.208 0.03];
+                  z = [-0.1 0.2];
+                  plot(x,z,'r-');
+                  x = [-0.21 0.02];
+                  z = [-0.1 0.2];
+                  plot(x,z,'r-');
+                  x = [-0.212 0.01];
+                  z = [-0.1 0.2];
+                  plot(x,z,'r-');
+                  x = [-0.214 0.0];
+                  z = [-0.1 0.2];
+                  plot(x,z,'r-');
+                  x = [-0.216 -0.01];
+                  z = [-0.1 0.2];
+                  plot(x,z,'r-');
               end
 
         case 1 % Gaussian
@@ -370,6 +428,8 @@ function c = addLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue, mcflag, ra
                 xx = -radius + 2*radius*i/20;
                 plot([xx xx],[zs zz],'r-')
             end
+        case 4 % do nothing
+            fprintf("draw no excitation\n");
     end
     c = 1;
 end

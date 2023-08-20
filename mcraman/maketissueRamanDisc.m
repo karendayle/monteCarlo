@@ -50,8 +50,8 @@ binsize     = 0.01; 	% size of each bin in [cm]. Increased by 20x for SERS-senso
 % Set Monte Carlo launch flags
 mcflag      = 0;     	% launch: 0 = uniform beam, 1 = Gaussian, 2 = isotropic pt. 
                         % 3 = rectangular beam (use xfocus,yfocus for x,y halfwidths)
-launchflag  = 0;        % 0 = let mcraman.c calculate launch trajectory
-                        % 1 = manually set launch vector.
+launchflag  = 1;        % 0 = let mcraman.c calculate launch trajectory
+                        % 1 = manually set launch vector. 5/25/22 try this
 boundaryflag = 1;       % 0 = no boundaries, 1 = escape at boundaries
                         % 2 = escape at surface only. No x, y, bottom z
                         % boundaries
@@ -71,8 +71,10 @@ radius      = 0.0200;   % 1/e radius of beam at tissue surface
 waist       = 0.0200;  	% 1/e radius of beam at focus
 
 % only used if launchflag == 1 (manually set launch trajectory):
-ux0         = 0.7;      % trajectory projected onto x axis
-uy0         = 0.4;      % trajectory projected onto y axis
+% ux0         = 0.7;      % trajectory projected onto x axis
+% uy0         = 0.4;      % trajectory projected onto y axis
+ux0         = 0.7;      % trajectory projected onto x axis 5/25/22 try this
+uy0         = 0.;      % trajectory projected onto y axis 5/25/22 try this
 uz0         = sqrt(1 - ux0^2 - uy0^2); % such that ux^2 + uy^2 + uz^2 = 1
 %%%%%%%%%%%%%%%%%%%%%%%%%
 
