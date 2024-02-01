@@ -245,6 +245,18 @@ set(gca,'fontsize',sz);
 xlabel('x [cm]');
 ylabel('z [cm]');
 title('Tissue structure: front view','FontSize',18);
+% 20240129 DOESN'T WORK set(groot,'defaultAxesTickLabelInterpreter','latex'); 
+% 20240129 DOESN'T WORK yticklabels(strrep(yticklabels,'-','$-$'));
+% 20240129
+xticks([-0.8 -0.6 -0.4 -0.2 0 0.2 0.4 0.6 0.8 1])
+% WORKS BUT IS NOT WHAT WE WANT xticklabels({'-0.8','-0.6','-0.4','-0.2','0.0','0.2','0.4','0.6','0.8','1.0'})
+% WORKS AND IS WHAT WE WANT...
+xlabels1=char(hex2dec('2212'));
+str1=append(xlabels1,'0.8');
+str2=append(xlabels1,'0.6');
+str3=append(xlabels1,'0.4');
+str4=append(xlabels1,'0.2');
+xticklabels({str1,str2,str3,str4,'0.0','0.2','0.4','0.6','0.8','1.0'})
 c = addFrontAndSideLegend(Nt, Nz, dz, x, xmin, xmax, zmax, zmin, tissue, mcflag, radius, zs, z);
 %%
 figure(2); clf
@@ -265,6 +277,28 @@ set(gca,'fontsize',sz)
 xlabel('x [cm]')
 ylabel('y [cm]')
 title('Tissue structure: top view at z=0.25 cm','FontSize',18);
+% 20240129
+xticks([-0.8 -0.6 -0.4 -0.2 0 0.2 0.4 0.6 0.8 1])
+% WORKS BUT IS NOT WHAT WE WANT xticklabels({'-0.8','-0.6','-0.4','-0.2','0.0','0.2','0.4','0.6','0.8','1.0'})
+% WORKS AND IS WHAT WE WANT...
+xlabels1=char(hex2dec('2212'));
+str1=append(xlabels1,'0.8');
+str2=append(xlabels1,'0.6');
+str3=append(xlabels1,'0.4');
+str4=append(xlabels1,'0.2');
+xticklabels({str1,str2,str3,str4,'0.0','0.2','0.4','0.6','0.8','1.0'})
+% 20240129
+%yticks([0.8 0.6 0.4 0.2 0 -0.2 -0.4 -0.6 -0.8 -1])
+yticks([-1 -0.8 -0.6 -0.4 -0.2 0 0.2 0.4 0.6 0.8 1])
+% WORKS BUT IS NOT WHAT WE WANT xticklabels({'-0.8','-0.6','-0.4','-0.2','0.0','0.2','0.4','0.6','0.8','1.0'})
+% WORKS AND IS WHAT WE WANT...
+ylabels1=char(hex2dec('2212'));
+str1=append(ylabels1,'0.2');
+str2=append(ylabels1,'0.4');
+str3=append(ylabels1,'0.6');
+str4=append(ylabels1,'0.8');
+str5=append(ylabels1,'1');
+yticklabels({'1.0','0.8','0.6','0.4','0.2','0.0',str1,str2,str3,str4,str5})
 c = addTopLegend(Nt, Nz, dz, x, xmin, xmax, -1*ymax, ymax, tissue, mcflag, radius, zs, z);
 hold on
 drawGrid();
